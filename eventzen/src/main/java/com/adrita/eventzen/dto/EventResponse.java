@@ -20,6 +20,7 @@ public class EventResponse {
     private BigDecimal venueCost;
     private BigDecimal ticketPrice;
     private Integer maxCapacity;
+    private Integer ticketAvailable;
     private EventStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -29,7 +30,8 @@ public class EventResponse {
 
     public EventResponse(Long id, String name, String description, LocalDate eventDate,
                          LocalTime startTime, LocalTime endTime, Long venueId, String venueName,
-                         BigDecimal venueCost, BigDecimal ticketPrice, Integer maxCapacity, EventStatus status,
+                         BigDecimal venueCost, BigDecimal ticketPrice, Integer maxCapacity,
+                         Integer ticketAvailable, EventStatus status,
                          LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
@@ -42,6 +44,7 @@ public class EventResponse {
         this.venueCost = venueCost;
         this.ticketPrice = ticketPrice;
         this.maxCapacity = maxCapacity;
+        this.ticketAvailable = ticketAvailable;
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -89,6 +92,10 @@ public class EventResponse {
 
     public Integer getMaxCapacity() {
         return maxCapacity;
+    }
+
+    public Integer getTicketAvailable() {
+        return ticketAvailable;
     }
 
     public EventStatus getStatus() {

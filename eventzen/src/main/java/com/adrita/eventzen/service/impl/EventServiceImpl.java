@@ -7,15 +7,18 @@ import com.adrita.eventzen.entity.EventStatus;
 import com.adrita.eventzen.entity.Venue;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.repository.BookingRepository;
 import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.VenueRepository;
 import com.adrita.eventzen.service.EventService;
+import com.adrita.eventzen.entity.BookingStatus;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
 
 @Service
@@ -23,10 +26,15 @@ public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
+    private final BookingRepository bookingRepository;
+    private static final EnumSet<EventStatus> VISIBLE_STATUSES = EnumSet.of(EventStatus.ACTIVE, EventStatus.SOLD_OUT);
 
-    public EventServiceImpl(EventRepository eventRepository, VenueRepository venueRepository) {
+    public EventServiceImpl(EventRepository eventRepository,
+                            VenueRepository venueRepository,
+                            BookingRepository bookingRepository) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
+        this.bookingRepository = bookingRepository;
     }
 
     @Override
@@ -35,6 +43,8 @@ public class EventServiceImpl implements EventService {
 
         Venue venue = venueRepository.findById(request.getVenueId())
                 .orElseThrow(() -> new ResourceNotFoundException("Venue not found with id: " + request.getVenueId()));
+
+        validateCapacityAgainstVenue(request, venue);
 
         checkVenueOverlap(request, null);
 
@@ -55,9 +65,12 @@ public class EventServiceImpl implements EventService {
         Venue venue = venueRepository.findById(request.getVenueId())
                 .orElseThrow(() -> new ResourceNotFoundException("Venue not found with id: " + request.getVenueId()));
 
+        validateCapacityAgainstVenue(request, venue);
+
         checkVenueOverlap(request, id);
 
-        applyRequestToEvent(event, request, venue);
+        int confirmedBookedSeats = getConfirmedBookedSeats(event.getId());
+        applyRequestToEvent(event, request, venue, confirmedBookedSeats);
         Event updated = eventRepository.save(event);
         return mapToResponse(updated);
     }
@@ -73,14 +86,14 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public List<EventResponse> getAllEvents() {
-        return eventRepository.findByStatus(EventStatus.ACTIVE).stream()
+        return eventRepository.findByStatusIn(VISIBLE_STATUSES).stream()
                 .map(this::mapToResponse)
                 .toList();
     }
 
     @Override
     public EventResponse getEventById(Long id) {
-        Event event = eventRepository.findByIdAndStatus(id, EventStatus.ACTIVE)
+        Event event = eventRepository.findByIdAndStatusIn(id, VISIBLE_STATUSES)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + id));
 
         return mapToResponse(event);
@@ -88,7 +101,7 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public List<EventResponse> getEventsByVenue(Long venueId) {
-        return eventRepository.findByVenueIdAndStatus(venueId, EventStatus.ACTIVE).stream()
+        return eventRepository.findByVenueIdAndStatusIn(venueId, VISIBLE_STATUSES).stream()
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -99,7 +112,7 @@ public class EventServiceImpl implements EventService {
                 ? null
                 : location.trim();
 
-        return eventRepository.searchEvents(date, normalizedLocation, EventStatus.ACTIVE).stream()
+        return eventRepository.searchEvents(date, normalizedLocation, VISIBLE_STATUSES).stream()
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -107,10 +120,20 @@ public class EventServiceImpl implements EventService {
     @Override
     public List<EventResponse> getUpcomingEvents() {
         return eventRepository
-                .findByEventDateGreaterThanEqualAndStatusOrderByEventDateAscStartTimeAsc(LocalDate.now(), EventStatus.ACTIVE)
+                .findByEventDateGreaterThanEqualAndStatusInOrderByEventDateAscStartTimeAsc(LocalDate.now(), VISIBLE_STATUSES)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    private void validateCapacityAgainstVenue(EventRequest request, Venue venue) {
+        if (request.getMaxCapacity() == null) {
+            throw new IllegalArgumentException("maxCapacity is required");
+        }
+
+        if (venue.getCapacity() != null && request.getMaxCapacity() > venue.getCapacity()) {
+            throw new IllegalArgumentException("Event maxCapacity cannot exceed venue capacity");
+        }
     }
 
     private void validateEventTiming(EventRequest request) {
@@ -134,6 +157,14 @@ public class EventServiceImpl implements EventService {
     }
 
     private void applyRequestToEvent(Event event, EventRequest request, Venue venue) {
+        applyRequestToEvent(event, request, venue, 0);
+    }
+
+    private void applyRequestToEvent(Event event, EventRequest request, Venue venue, int confirmedBookedSeats) {
+        if (confirmedBookedSeats > request.getMaxCapacity()) {
+            throw new IllegalArgumentException("maxCapacity cannot be less than already confirmed seats");
+        }
+
         event.setName(request.getName());
         event.setDescription(request.getDescription());
         event.setEventDate(request.getEventDate());
@@ -144,9 +175,21 @@ public class EventServiceImpl implements EventService {
         event.setTicketPrice(request.getTicketPrice());
         event.setMaxCapacity(request.getMaxCapacity());
 
+        int ticketAvailable = Math.max(request.getMaxCapacity() - confirmedBookedSeats, 0);
+        event.setTicketAvailable(ticketAvailable);
+
+        if (event.getStatus() != EventStatus.CANCELLED && event.getStatus() != EventStatus.COMPLETED) {
+            event.setStatus(ticketAvailable == 0 ? EventStatus.SOLD_OUT : EventStatus.ACTIVE);
+        }
+
         if (event.getStatus() == null) {
             event.setStatus(EventStatus.ACTIVE);
         }
+    }
+
+    private int getConfirmedBookedSeats(Long eventId) {
+        Integer seats = bookingRepository.sumBookedSeatsByEventIdAndStatus(eventId, BookingStatus.CONFIRMED);
+        return seats == null ? 0 : seats;
     }
 
     private BigDecimal calculateVenueCost(Venue venue, EventRequest request) {
@@ -176,6 +219,7 @@ public class EventServiceImpl implements EventService {
                 event.getVenueCost(),
                 event.getTicketPrice(),
                 event.getMaxCapacity(),
+                event.getTicketAvailable(),
                 event.getStatus(),
                 event.getCreatedAt(),
                 event.getUpdatedAt()

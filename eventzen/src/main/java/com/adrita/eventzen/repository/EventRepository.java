@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +22,15 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     List<Event> findByEventDateGreaterThanEqualAndStatusOrderByEventDateAscStartTimeAsc(LocalDate eventDate,
                                                                                          EventStatus status);
+
+    List<Event> findByStatusIn(Collection<EventStatus> statuses);
+
+    Optional<Event> findByIdAndStatusIn(Long id, Collection<EventStatus> statuses);
+
+    List<Event> findByVenueIdAndStatusIn(Long venueId, Collection<EventStatus> statuses);
+
+    List<Event> findByEventDateGreaterThanEqualAndStatusInOrderByEventDateAscStartTimeAsc(LocalDate eventDate,
+                                                Collection<EventStatus> statuses);
 
     @Query(value = """
             SELECT CASE WHEN COUNT_BIG(e.id) > 0 THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END
@@ -41,7 +51,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @Query("""
             SELECT e FROM Event e
             JOIN e.venue v
-            WHERE e.status = :status
+          WHERE e.status IN :statuses
               AND (:date IS NULL OR e.eventDate = :date)
               AND (
                     :location IS NULL
@@ -53,5 +63,5 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             """)
     List<Event> searchEvents(@Param("date") LocalDate date,
                              @Param("location") String location,
-                             @Param("status") EventStatus status);
+                             @Param("statuses") Collection<EventStatus> statuses);
 }

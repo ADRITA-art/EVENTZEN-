@@ -55,6 +55,9 @@ public class Event {
     @Column(name = "max_capacity")
     private Integer maxCapacity;
 
+    @Column(name = "ticket_available", nullable = false)
+    private Integer ticketAvailable;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private EventStatus status = EventStatus.ACTIVE;
@@ -163,6 +166,14 @@ public class Event {
 
     public void setMaxCapacity(Integer maxCapacity) {
         this.maxCapacity = maxCapacity;
+    }
+
+    public Integer getTicketAvailable() {
+        return ticketAvailable;
+    }
+
+    public void setTicketAvailable(Integer ticketAvailable) {
+        this.ticketAvailable = ticketAvailable;
     }
 
     public EventStatus getStatus() {

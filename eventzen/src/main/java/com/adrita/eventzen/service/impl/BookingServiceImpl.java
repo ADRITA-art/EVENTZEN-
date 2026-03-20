@@ -15,6 +15,7 @@ import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.UserRepository;
 import com.adrita.eventzen.service.BookingService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +38,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional
     public BookingResponse createBooking(String userEmail, BookingRequest request) {
         User user = getUserByEmail(userEmail);
         Event event = getActiveEvent(request.getEventId());
@@ -61,6 +63,8 @@ public class BookingServiceImpl implements BookingService {
         booking.setTotalPrice(totalPrice);
         booking.setStatus(BookingStatus.CONFIRMED);
 
+        updateEventTicketAvailability(event, request.getNumberOfSeats());
+
         Booking saved = bookingRepository.save(booking);
         return mapToResponse(saved);
     }
@@ -74,6 +78,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional
     public void cancelMyBooking(String userEmail, Long bookingId) {
         User user = getUserByEmail(userEmail);
 
@@ -82,6 +87,10 @@ public class BookingServiceImpl implements BookingService {
 
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new IllegalArgumentException("Booking is already cancelled");
+        }
+
+        if (booking.getStatus() == BookingStatus.CONFIRMED) {
+            updateEventTicketAvailability(booking.getEvent(), -booking.getNumberOfSeats());
         }
 
         booking.setStatus(BookingStatus.CANCELLED);
@@ -106,6 +115,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional
     public BookingResponse updateBookingStatus(Long bookingId, BookingStatusUpdateRequest request) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + bookingId));
@@ -116,6 +126,11 @@ public class BookingServiceImpl implements BookingService {
             Event event = booking.getEvent();
             validateEventBookable(event);
             ensureCapacityAvailable(event, booking.getNumberOfSeats());
+            updateEventTicketAvailability(event, booking.getNumberOfSeats());
+        }
+
+        if (newStatus == BookingStatus.CANCELLED && booking.getStatus() == BookingStatus.CONFIRMED) {
+            updateEventTicketAvailability(booking.getEvent(), -booking.getNumberOfSeats());
         }
 
         booking.setStatus(newStatus);
@@ -141,8 +156,14 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Event getActiveEvent(Long eventId) {
-        return eventRepository.findByIdAndStatus(eventId, EventStatus.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("Active event not found with id: " + eventId));
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + eventId));
+
+        if (event.getStatus() != EventStatus.ACTIVE) {
+            throw new ResourceNotFoundException("Active event not found with id: " + eventId);
+        }
+
+        return event;
     }
 
     private void validateEventBookable(Event event) {
@@ -179,6 +200,25 @@ public class BookingServiceImpl implements BookingService {
     private int getConfirmedBookedSeats(Long eventId) {
         Integer seats = bookingRepository.sumBookedSeatsByEventIdAndStatus(eventId, BookingStatus.CONFIRMED);
         return seats == null ? 0 : seats;
+    }
+
+    private void updateEventTicketAvailability(Event event, int confirmedSeatDelta) {
+        if (event.getTicketAvailable() == null) {
+            throw new IllegalArgumentException("Event ticket availability is not configured");
+        }
+
+        int updatedAvailable = event.getTicketAvailable() - confirmedSeatDelta;
+        if (updatedAvailable < 0) {
+            throw new IllegalArgumentException("Not enough seats available");
+        }
+
+        event.setTicketAvailable(updatedAvailable);
+
+        if (event.getStatus() != EventStatus.CANCELLED && event.getStatus() != EventStatus.COMPLETED) {
+            event.setStatus(updatedAvailable == 0 ? EventStatus.SOLD_OUT : EventStatus.ACTIVE);
+        }
+
+        eventRepository.save(event);
     }
 
     private BookingResponse mapToResponse(Booking booking) {

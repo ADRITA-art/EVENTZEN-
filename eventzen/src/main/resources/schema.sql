@@ -45,6 +45,7 @@ BEGIN
 		venue_cost DECIMAL(10,2),
 		ticket_price DECIMAL(10,2) NOT NULL DEFAULT 0,
 		max_capacity INT,
+		ticket_available INT NOT NULL DEFAULT 0,
 		status VARCHAR(50) NOT NULL DEFAULT ''ACTIVE'',
 		created_at DATETIME NOT NULL DEFAULT GETDATE(),
 		updated_at DATETIME NOT NULL DEFAULT GETDATE(),
@@ -74,10 +75,18 @@ EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND COL_LENGTH(''dbo.event
 
 EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND COL_LENGTH(''dbo.events'', ''venue_cost'') IS NULL ALTER TABLE dbo.events ADD venue_cost DECIMAL(10,2) NULL');
 
+EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND COL_LENGTH(''dbo.events'', ''ticket_available'') IS NULL ALTER TABLE dbo.events ADD ticket_available INT NULL');
+
 EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND COL_LENGTH(''dbo.events'', ''price'') IS NOT NULL UPDATE dbo.events SET ticket_price = COALESCE(ticket_price, price) WHERE ticket_price IS NULL');
 
 EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL UPDATE dbo.events SET ticket_price = 0 WHERE ticket_price IS NULL');
 
+EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL UPDATE dbo.events SET ticket_available = COALESCE(ticket_available, max_capacity, 0) WHERE ticket_available IS NULL');
+
 EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id JOIN sys.tables t ON t.object_id = c.object_id WHERE t.name = ''events'' AND c.name = ''ticket_price'') ALTER TABLE dbo.events ADD CONSTRAINT DF_events_ticket_price DEFAULT (0) FOR ticket_price');
 
+EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id JOIN sys.tables t ON t.object_id = c.object_id WHERE t.name = ''events'' AND c.name = ''ticket_available'') ALTER TABLE dbo.events ADD CONSTRAINT DF_events_ticket_available DEFAULT (0) FOR ticket_available');
+
 EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL ALTER TABLE dbo.events ALTER COLUMN ticket_price DECIMAL(10,2) NOT NULL');
+
+EXEC('IF OBJECT_ID(''dbo.events'', ''U'') IS NOT NULL ALTER TABLE dbo.events ALTER COLUMN ticket_available INT NOT NULL');
