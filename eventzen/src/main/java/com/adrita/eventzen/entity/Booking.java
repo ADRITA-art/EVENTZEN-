@@ -42,17 +42,17 @@ public class Booking {
     @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalPrice;
 
-    @Column(name = "booking_time", nullable = false, columnDefinition = "DATETIME DEFAULT GETDATE()")
+    @Column(name = "booking_time", nullable = false)
     private LocalDateTime bookingTime;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private BookingStatus status = BookingStatus.CONFIRMED;
 
-    @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME DEFAULT GETDATE()")
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME DEFAULT GETDATE()")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     public Booking() {

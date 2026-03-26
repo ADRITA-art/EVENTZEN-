@@ -32,16 +32,16 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByEventDateGreaterThanEqualAndStatusInOrderByEventDateAscStartTimeAsc(LocalDate eventDate,
                                                 Collection<EventStatus> statuses);
 
-    @Query(value = """
-            SELECT CASE WHEN COUNT_BIG(e.id) > 0 THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END
-            FROM events e
-            WHERE e.venue_id = :venueId
-              AND e.event_date = :eventDate
-              AND CAST(e.status AS VARCHAR(50)) = 'ACTIVE'
+    @Query("""
+            SELECT CASE WHEN COUNT(e) > 0 THEN true ELSE false END
+            FROM Event e
+            WHERE e.venue.id = :venueId
+              AND e.eventDate = :eventDate
+              AND e.status = com.adrita.eventzen.entity.EventStatus.ACTIVE
               AND (:excludeEventId IS NULL OR e.id <> :excludeEventId)
-              AND CAST(e.start_time AS time) < CAST(:newEndTime AS time)
-              AND CAST(e.end_time AS time) > CAST(:newStartTime AS time)
-            """, nativeQuery = true)
+              AND e.startTime < :newEndTime
+              AND e.endTime > :newStartTime
+            """)
     boolean existsOverlappingEvent(@Param("venueId") Long venueId,
                                    @Param("eventDate") LocalDate eventDate,
                                    @Param("newStartTime") LocalTime newStartTime,

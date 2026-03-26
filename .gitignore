@@ -44,3 +44,8 @@ out/
 
 *.log
 docs/
+
+.env
+**/.env
+!.env.example
+!**/.env.example
