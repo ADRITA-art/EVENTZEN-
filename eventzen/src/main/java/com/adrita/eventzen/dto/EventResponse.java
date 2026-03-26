@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 public class EventResponse {
 
@@ -18,9 +19,12 @@ public class EventResponse {
     private Long venueId;
     private String venueName;
     private BigDecimal venueCost;
+    private BigDecimal vendorCost;
+    private BigDecimal totalCost;
     private BigDecimal ticketPrice;
     private Integer maxCapacity;
     private Integer ticketAvailable;
+    private List<EventVendorResponse> vendors;
     private EventStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -30,8 +34,9 @@ public class EventResponse {
 
     public EventResponse(Long id, String name, String description, LocalDate eventDate,
                          LocalTime startTime, LocalTime endTime, Long venueId, String venueName,
-                         BigDecimal venueCost, BigDecimal ticketPrice, Integer maxCapacity,
-                         Integer ticketAvailable, EventStatus status,
+                         BigDecimal venueCost, BigDecimal vendorCost, BigDecimal totalCost,
+                         BigDecimal ticketPrice, Integer maxCapacity, Integer ticketAvailable,
+                         List<EventVendorResponse> vendors, EventStatus status,
                          LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
@@ -42,9 +47,12 @@ public class EventResponse {
         this.venueId = venueId;
         this.venueName = venueName;
         this.venueCost = venueCost;
+        this.vendorCost = vendorCost;
+        this.totalCost = totalCost;
         this.ticketPrice = ticketPrice;
         this.maxCapacity = maxCapacity;
         this.ticketAvailable = ticketAvailable;
+        this.vendors = vendors;
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -86,6 +94,14 @@ public class EventResponse {
         return venueCost;
     }
 
+    public BigDecimal getVendorCost() {
+        return vendorCost;
+    }
+
+    public BigDecimal getTotalCost() {
+        return totalCost;
+    }
+
     public BigDecimal getTicketPrice() {
         return ticketPrice;
     }
@@ -96,6 +112,10 @@ public class EventResponse {
 
     public Integer getTicketAvailable() {
         return ticketAvailable;
+    }
+
+    public List<EventVendorResponse> getVendors() {
+        return vendors;
     }
 
     public EventStatus getStatus() {

@@ -2,13 +2,16 @@ package com.adrita.eventzen.service.impl;
 
 import com.adrita.eventzen.dto.EventRequest;
 import com.adrita.eventzen.dto.EventResponse;
+import com.adrita.eventzen.dto.EventVendorResponse;
 import com.adrita.eventzen.entity.Event;
 import com.adrita.eventzen.entity.EventStatus;
+import com.adrita.eventzen.entity.EventVendor;
 import com.adrita.eventzen.entity.Venue;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
 import com.adrita.eventzen.repository.BookingRepository;
 import com.adrita.eventzen.repository.EventRepository;
+import com.adrita.eventzen.repository.EventVendorRepository;
 import com.adrita.eventzen.repository.VenueRepository;
 import com.adrita.eventzen.service.EventService;
 import com.adrita.eventzen.entity.BookingStatus;
@@ -27,14 +30,17 @@ public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
     private final BookingRepository bookingRepository;
+    private final EventVendorRepository eventVendorRepository;
     private static final EnumSet<EventStatus> VISIBLE_STATUSES = EnumSet.of(EventStatus.ACTIVE, EventStatus.SOLD_OUT);
 
     public EventServiceImpl(EventRepository eventRepository,
                             VenueRepository venueRepository,
-                            BookingRepository bookingRepository) {
+                            BookingRepository bookingRepository,
+                            EventVendorRepository eventVendorRepository) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.bookingRepository = bookingRepository;
+        this.eventVendorRepository = eventVendorRepository;
     }
 
     @Override
@@ -207,6 +213,21 @@ public class EventServiceImpl implements EventService {
     }
 
     private EventResponse mapToResponse(Event event) {
+        List<EventVendorResponse> vendors = eventVendorRepository.findAllByEventIdWithVendor(event.getId()).stream()
+            .map(this::mapVendorToResponse)
+            .toList();
+
+        BigDecimal vendorCost = vendors.stream()
+            .map(EventVendorResponse::getCost)
+            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal venueCost = event.getVenueCost() == null
+            ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+            : event.getVenueCost().setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal totalCost = venueCost.add(vendorCost).setScale(2, RoundingMode.HALF_UP);
+
         return new EventResponse(
                 event.getId(),
                 event.getName(),
@@ -216,13 +237,30 @@ public class EventServiceImpl implements EventService {
                 event.getEndTime(),
                 event.getVenue().getId(),
                 event.getVenue().getName(),
-                event.getVenueCost(),
+            venueCost,
+            vendorCost,
+            totalCost,
                 event.getTicketPrice(),
                 event.getMaxCapacity(),
                 event.getTicketAvailable(),
+            vendors,
                 event.getStatus(),
                 event.getCreatedAt(),
                 event.getUpdatedAt()
         );
     }
+
+        private EventVendorResponse mapVendorToResponse(EventVendor mapping) {
+        return new EventVendorResponse(
+            mapping.getId(),
+            mapping.getVendor().getId(),
+            mapping.getVendor().getName(),
+            mapping.getVendor().getServiceType(),
+            mapping.getVendor().getContactPerson(),
+            mapping.getVendor().getPhone(),
+            mapping.getVendor().getEmail(),
+            mapping.getPurpose(),
+            mapping.getCost()
+        );
+        }
 }
