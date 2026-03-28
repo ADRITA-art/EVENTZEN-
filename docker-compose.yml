@@ -10,6 +10,24 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+
+  budget-db:
+    image: postgres:16-alpine
+    container_name: budget-tracking-db
+    environment:
+      POSTGRES_DB: budget_tracking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - budget_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d budget_tracking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./eventzen
     container_name: eventzen-backend
@@ -28,5 +46,24 @@ services:
     depends_on:
       - backend
 
+  budget-service:
+    build: ./budget-service
+    container_name: budget-service
+    depends_on:
+      budget-db:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DB_HOST: budget-db
+      DB_PORT: 5432
+      DB_NAME: budget_tracking
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_RETRY_COUNT: 12
+      DB_RETRY_DELAY_MS: 3000
+    ports:
+      - "4001:8081"
+
 volumes:
   mysql_data:
+  budget_postgres_data:
