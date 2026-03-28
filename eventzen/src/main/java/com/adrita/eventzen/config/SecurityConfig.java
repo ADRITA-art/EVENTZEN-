@@ -50,7 +50,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints - anyone can hit these
-                    .requestMatchers("/auth/register", "/auth/login").permitAll()
+                    .requestMatchers("/auth/register", "/auth/login", "/readiness").permitAll()
                         // Everything else requires a valid JWT
                         .anyRequest().authenticated()
                 )

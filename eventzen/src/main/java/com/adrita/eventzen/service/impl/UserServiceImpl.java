@@ -10,8 +10,8 @@ import com.adrita.eventzen.exception.BadCredentialsException;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
 import com.adrita.eventzen.repository.UserRepository;
+import com.adrita.eventzen.security.PasswordSecurityService;
 import com.adrita.eventzen.service.UserService;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,11 +20,11 @@ import java.util.List;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordSecurityService passwordSecurityService;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository, PasswordSecurityService passwordSecurityService) {
         this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
+        this.passwordSecurityService = passwordSecurityService;
     }
 
     @Override
@@ -36,7 +36,7 @@ public class UserServiceImpl implements UserService {
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
+            .password(passwordSecurityService.hash(request.getPassword()))
                 .role(request.getRole())
                 .build();
 
@@ -50,7 +50,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No account found with email: " + request.getEmail()));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (!verifyPasswordWithMigration(user, request.getPassword())) {
             throw new BadCredentialsException("Invalid email or password");
         }
 
@@ -87,11 +87,11 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+        if (!verifyPasswordWithMigration(user, request.getOldPassword())) {
             throw new BadCredentialsException("Old password is incorrect");
         }
 
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setPassword(passwordSecurityService.hash(request.getNewPassword()));
         userRepository.save(user);
     }
 
@@ -130,5 +130,19 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
 
         userRepository.delete(user);
+    }
+
+    private boolean verifyPasswordWithMigration(User user, String rawPassword) {
+        if (passwordSecurityService.matches(rawPassword, user.getPassword())) {
+            return true;
+        }
+
+        if (passwordSecurityService.matchesLegacy(rawPassword, user.getPassword())) {
+            user.setPassword(passwordSecurityService.hash(rawPassword));
+            userRepository.save(user);
+            return true;
+        }
+
+        return false;
     }
 }

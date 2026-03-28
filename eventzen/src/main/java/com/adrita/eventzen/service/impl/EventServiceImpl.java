@@ -9,6 +9,7 @@ import com.adrita.eventzen.entity.EventVendor;
 import com.adrita.eventzen.entity.Venue;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.integration.budget.BudgetClient;
 import com.adrita.eventzen.repository.BookingRepository;
 import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.EventVendorRepository;
@@ -16,6 +17,7 @@ import com.adrita.eventzen.repository.VenueRepository;
 import com.adrita.eventzen.service.EventService;
 import com.adrita.eventzen.entity.BookingStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -31,19 +33,23 @@ public class EventServiceImpl implements EventService {
     private final VenueRepository venueRepository;
     private final BookingRepository bookingRepository;
     private final EventVendorRepository eventVendorRepository;
+    private final BudgetClient budgetClient;
     private static final EnumSet<EventStatus> VISIBLE_STATUSES = EnumSet.of(EventStatus.ACTIVE, EventStatus.SOLD_OUT);
 
     public EventServiceImpl(EventRepository eventRepository,
                             VenueRepository venueRepository,
                             BookingRepository bookingRepository,
-                            EventVendorRepository eventVendorRepository) {
+                            EventVendorRepository eventVendorRepository,
+                            BudgetClient budgetClient) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.bookingRepository = bookingRepository;
         this.eventVendorRepository = eventVendorRepository;
+        this.budgetClient = budgetClient;
     }
 
     @Override
+    @Transactional
     public EventResponse createEvent(EventRequest request) {
         validateEventTiming(request);
 
@@ -58,10 +64,15 @@ public class EventServiceImpl implements EventService {
         applyRequestToEvent(event, request, venue);
 
         Event saved = eventRepository.save(event);
-        return mapToResponse(saved);
+        EventResponse response = mapToResponse(saved);
+
+        // Keep budget-service in sync when a new event is created.
+        budgetClient.createBudgetForEvent(saved.getId(), response.getTotalCost());
+        return response;
     }
 
     @Override
+    @Transactional
     public EventResponse updateEvent(Long id, EventRequest request) {
         validateEventTiming(request);
 
@@ -78,7 +89,11 @@ public class EventServiceImpl implements EventService {
         int confirmedBookedSeats = getConfirmedBookedSeats(event.getId());
         applyRequestToEvent(event, request, venue, confirmedBookedSeats);
         Event updated = eventRepository.save(event);
-        return mapToResponse(updated);
+        EventResponse response = mapToResponse(updated);
+
+        // Update budget-service when event costs change during event updates.
+        budgetClient.updateBudgetForEvent(updated.getId(), response.getTotalCost());
+        return response;
     }
 
     @Override

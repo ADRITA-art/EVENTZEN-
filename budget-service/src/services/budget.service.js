@@ -19,6 +19,18 @@ const createBudget = async ({ eventId, totalBudget }) => {
   return budget;
 };
 
+const updateBudgetByEventId = async (eventId, totalBudget) => {
+  const budget = await EventBudget.findOne({ where: { eventId } });
+  if (!budget) {
+    const error = new Error('Budget not found for this eventId');
+    error.status = 404;
+    throw error;
+  }
+
+  await budget.update({ totalBudget });
+  return budget;
+};
+
 const getBudgetByEventId = async (eventId) => {
   const budget = await EventBudget.findOne({ where: { eventId } });
   if (!budget) {
@@ -125,6 +137,7 @@ const deleteExpenseById = async (expenseId) => {
 
 module.exports = {
   createBudget,
+  updateBudgetByEventId,
   getBudgetByEventId,
   addExpense,
   getExpensesByEventId,

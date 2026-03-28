@@ -39,6 +39,25 @@ const createBudget = async (req, res, next) => {
   }
 };
 
+const updateBudgetByEventId = async (req, res, next) => {
+  try {
+    const eventId = parsePositiveInteger(req.params.eventId, 'eventId');
+    const totalBudget = parsePositiveNumber(req.body.totalBudget, 'totalBudget');
+
+    const budget = await budgetService.updateBudgetByEventId(eventId, totalBudget);
+
+    res.status(200).json({
+      id: budget.id,
+      eventId: budget.eventId,
+      totalBudget: budget.totalBudget,
+      actualCost: budget.actualCost,
+      createdAt: budget.createdAt,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getBudgetByEventId = async (req, res, next) => {
   try {
     const eventId = parsePositiveInteger(req.params.eventId, 'eventId');
@@ -52,5 +71,6 @@ const getBudgetByEventId = async (req, res, next) => {
 
 module.exports = {
   createBudget,
+  updateBudgetByEventId,
   getBudgetByEventId,
 };
