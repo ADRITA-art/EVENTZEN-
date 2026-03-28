@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, CalendarDays, AlertCircle, CheckCircle, Truck, DollarSign } from 'lucide-react';
+import { Plus, Edit2, Trash2, CalendarDays, AlertCircle, CheckCircle, Truck, DollarSign, Info } from 'lucide-react';
 import { getAllEvents, createEvent, updateEvent, cancelEvent, getEventVendors, attachVendorsToEvent, removeVendorFromEvent } from '../../api/events';
 import { getVenues } from '../../api/venues';
 import { getAllVendors } from '../../api/vendors';
@@ -15,6 +15,25 @@ const emptyForm = {
 const emptyVendorForm = { vendorId: '', purpose: '', cost: '' };
 const emptyExpenseForm = { description: '', amount: '' };
 const emptyBudgetForm = { totalBudget: '' };
+
+const Tooltip = ({ text, children }) => (
+  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }} className="group">
+    {children}
+    <div 
+      className="group-hover:opacity-100 group-hover:visible"
+      style={{
+         position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+         marginBottom: '6px', padding: '6px 10px', background: '#191c1e', color: '#fff',
+         fontSize: '0.75rem', borderRadius: '6px', width: 'max-content', maxWidth: '240px',
+         textAlign: 'center', opacity: 0, visibility: 'hidden', transition: 'all 0.2s ease', zIndex: 100,
+         lineHeight: '1.4', fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+         pointerEvents: 'none'
+      }}>
+      {text}
+      <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', border: '5px solid transparent', borderTopColor: '#191c1e' }} />
+    </div>
+  </div>
+);
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState([]);
@@ -384,34 +403,92 @@ export default function AdminEventsPage() {
 
       {budgetModal && (
         <Modal title={`Budget: ${budgetModal.event.name}`} onClose={() => setBudgetModal(null)} maxWidth="640px">
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-             <div style={{ flex: 1, padding: '1rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase' }}>Total Budget</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+             <div style={{ padding: '1rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   💰 Total Budget
+                   <Tooltip text="The maximum amount allocated for this event. Set by the admin as a spending limit."><Info size={14} color="#0284c7" /></Tooltip>
+                </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0c4a6e' }}>₹{budgetModal.budget?.totalBudget ? Number(budgetModal.budget.totalBudget).toLocaleString() : '0.00'}</div>
              </div>
-             <div style={{ flex: 1, padding: '1rem', background: '#fdf4ff', borderRadius: '8px', border: '1px solid #fbcfe8' }}>
-               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a21caf', textTransform: 'uppercase' }}>Estimated Cost</div>
-               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#701a75' }}>₹{budgetModal.budget?.estimatedCost ? Number(budgetModal.budget.estimatedCost).toLocaleString() : '0.00'}</div>
+             <div style={{ padding: '1rem', background: '#fdf4ff', borderRadius: '8px', border: '1px solid #fbcfe8' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#a21caf', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   📊 Estimated Cost
+                   <Tooltip text="The projected cost based on venue and planned vendor expenses. This is an estimate and may change."><Info size={14} color="#c026d3" /></Tooltip>
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#701a75' }}>₹{budgetModal.budget?.estimatedCost ? Number(budgetModal.budget.estimatedCost).toLocaleString() : '0.00'}</div>
              </div>
-             <div style={{ flex: 1, padding: '1rem', background: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a21caf', textTransform: 'uppercase' }}>Actual Cost</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#701a75' }}>₹{budgetModal.budget?.actualCost ? Number(budgetModal.budget.actualCost).toLocaleString() : '0.00'}</div>
+             <div style={{ padding: '1rem', background: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   💸 Actual Cost
+                   <Tooltip text="The real amount spent so far, calculated from all recorded expenses."><Info size={14} color="#ea580c" /></Tooltip>
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#7c2d12' }}>₹{budgetModal.budget?.actualCost ? Number(budgetModal.budget.actualCost).toLocaleString() : '0.00'}</div>
              </div>
-             <div style={{ flex: 1, padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase' }}>Remaining</div>
+             <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   📉 Remaining
+                   <Tooltip text="The remaining amount available to spend. Calculated as total budget minus actual cost."><Info size={14} color="#16a34a" /></Tooltip>
+                </div>
                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#14532d' }}>₹{budgetModal.budget?.remainingBudget ? Number(budgetModal.budget.remainingBudget).toLocaleString() : '0.00'}</div>
              </div>
           </div>
 
-           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
              <div style={{ flex: 1, padding: '1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Revenue</div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   💵 Revenue
+                   <Tooltip text="The total earnings from confirmed bookings for this event."><Info size={14} color="#2563eb" /></Tooltip>
+               </div>
                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e3a8a' }}>₹{budgetModal.budget?.revenue ? Number(budgetModal.budget.revenue).toLocaleString() : '0.00'}</div>
              </div>
              <div style={{ flex: 1, padding: '1rem', background: '#ecfeff', borderRadius: '8px', border: '1px solid #a5f3fc' }}>
-               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0e7490', textTransform: 'uppercase' }}>Profit</div>
-               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#164e63' }}>₹{budgetModal.budget?.profit ? Number(budgetModal.budget.profit).toLocaleString() : '0.00'}</div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#0e7490', textTransform: 'uppercase', marginBottom: '4px' }}>
+                   📈 Profit
+                   <Tooltip text="The net gain or loss. Calculated as revenue minus actual cost."><Info size={14} color="#0891b2" /></Tooltip>
+               </div>
+               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#164e63' }}>
+                 <span style={{ color: Number(budgetModal.budget?.profit) < 0 ? '#991b1b' : '#164e63' }}>
+                   ₹{budgetModal.budget?.profit ? Number(budgetModal.budget.profit).toLocaleString() : '0.00'}
+                 </span>
+               </div>
              </div>
+           </div>
+
+           <div style={{ marginBottom: '1.5rem', background: '#fff', borderRadius: '8px', padding: '1rem', border: '1px solid #e1e4ed' }}>
+               <h3 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '1rem', color: '#191c1e' }}>Budget Utilization Overview</h3>
+               
+               <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px', fontWeight: 600, color: '#434655' }}>
+                    <span>Actual vs Estimated Cost</span>
+                    <span>
+                      {Number(budgetModal.budget?.actualCost || 0).toLocaleString()} / {Number(budgetModal.budget?.estimatedCost || 0).toLocaleString()} (est)
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: '14px', background: '#fee2e2', borderRadius: '8px', position: 'relative', overflow: 'hidden' }}>
+                     <div style={{ 
+                       position: 'absolute', top: 0, left: 0, height: '100%', background: '#dc2626', borderRadius: '8px',
+                       width: `${Math.min(((Number(budgetModal.budget?.actualCost || 0) / (Number(budgetModal.budget?.estimatedCost || 1) || 1)) * 100).toFixed(1), 100)}%` 
+                     }} />
+                  </div>
+               </div>
+
+               <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px', fontWeight: 600, color: '#434655' }}>
+                    <span>Total Limit Used</span>
+                    <span>
+                      {Number(budgetModal.budget?.totalBudget) > 0 ? `${((Number(budgetModal.budget?.actualCost || 0) / Number(budgetModal.budget?.totalBudget)) * 100).toFixed(1)}% limit used` : "No limit set"}
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: '14px', background: '#e0f2fe', borderRadius: '8px', position: 'relative', overflow: 'hidden' }}>
+                     <div style={{ 
+                       position: 'absolute', top: 0, left: 0, height: '100%', 
+                       background: (Number(budgetModal.budget?.actualCost || 0) > Number(budgetModal.budget?.totalBudget || 0) && Number(budgetModal.budget?.totalBudget || 0) > 0) ? '#dc2626' : '#0369a1',
+                       borderRadius: '8px',
+                       width: `${Number(budgetModal.budget?.totalBudget) > 0 ? Math.min(((Number(budgetModal.budget?.actualCost || 0) / Number(budgetModal.budget?.totalBudget)) * 100).toFixed(1), 100) : 0}%` 
+                     }} />
+                  </div>
+               </div>
            </div>
 
            <form onSubmit={handleSetBudget} style={{ borderTop: '1px solid #e1e4ed', borderBottom: '1px solid #e1e4ed', padding: '1rem 0', display: 'grid', gridTemplateColumns: '2fr auto', gap: '0.875rem', alignItems: 'end', marginBottom: '1.5rem' }}>
