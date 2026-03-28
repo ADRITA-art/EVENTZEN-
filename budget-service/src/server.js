@@ -13,7 +13,7 @@ const connectAndSyncDb = async () => {
   for (let attempt = 1; attempt <= RETRY_COUNT; attempt += 1) {
     try {
       await sequelize.authenticate();
-      await sequelize.sync();
+      await sequelize.sync({ alter: true });
       return;
     } catch (error) {
       lastError = error;

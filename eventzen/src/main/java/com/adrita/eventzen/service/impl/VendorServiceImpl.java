@@ -42,7 +42,8 @@ public class VendorServiceImpl implements VendorService {
         Vendor vendor = vendorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vendor not found with id: " + id));
 
-        vendorRepository.delete(vendor);
+        vendor.setActive(false);
+        vendorRepository.save(vendor);
     }
 
     @Override
@@ -53,8 +54,23 @@ public class VendorServiceImpl implements VendorService {
     }
 
     @Override
+    public List<VendorResponse> getAllActiveVendors() {
+        return vendorRepository.findByActiveTrue().stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
     public VendorResponse getVendorById(Long id) {
         Vendor vendor = vendorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Vendor not found with id: " + id));
+
+        return mapToResponse(vendor);
+    }
+
+    @Override
+    public VendorResponse getActiveVendorById(Long id) {
+        Vendor vendor = vendorRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vendor not found with id: " + id));
 
         return mapToResponse(vendor);

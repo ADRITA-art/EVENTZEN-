@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, CalendarDays, AlertCircle, CheckCircle } from 'lucide-react';
-import { getAllEvents, createEvent, updateEvent, cancelEvent } from '../../api/events';
+import { Plus, Edit2, Trash2, CalendarDays, AlertCircle, CheckCircle, Truck, DollarSign } from 'lucide-react';
+import { getAllEvents, createEvent, updateEvent, cancelEvent, getEventVendors, attachVendorsToEvent, removeVendorFromEvent } from '../../api/events';
 import { getVenues } from '../../api/venues';
+import { getAllVendors } from '../../api/vendors';
+import { getBudgetByEvent, setBudgetForEvent, getExpensesByEvent, addExpense, deleteExpense } from '../../api/budget';
 import Modal from '../../components/ui/Modal';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Spinner from '../../components/ui/Spinner';
@@ -10,27 +12,40 @@ const emptyForm = {
   name: '', description: '', eventDate: '', startTime: '', endTime: '',
   venueId: '', ticketPrice: '', maxCapacity: '',
 };
+const emptyVendorForm = { vendorId: '', purpose: '', cost: '' };
+const emptyExpenseForm = { description: '', amount: '' };
+const emptyBudgetForm = { totalBudget: '' };
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState([]);
   const [venues, setVenues] = useState([]);
+  const [allVendors, setAllVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  
+  const [vendorModal, setVendorModal] = useState(null);
+  const [vendorForm, setVendorForm] = useState(emptyVendorForm);
+  
+  const [budgetModal, setBudgetModal] = useState(null);
+  const [expenseForm, setExpenseForm] = useState(emptyExpenseForm);
+  const [budgetForm, setBudgetForm] = useState(emptyBudgetForm);
+  
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
 
-  // The capacity of the currently selected venue (for dynamic cap)
   const selectedVenue = venues.find((v) => String(v.id) === String(form.venueId));
   const maxForCapacity = selectedVenue ? selectedVenue.capacity : undefined;
 
   const load = async () => {
     setLoading(true);
     try {
-      const [er, vr] = await Promise.all([getAllEvents(), getVenues()]);
+      const [er, vr, venR] = await Promise.all([getAllEvents(), getVenues(), getAllVendors()]);
       setEvents(er.data);
       setVenues(vr.data);
+      setAllVendors(venR.data);
     } catch (_) {}
     setLoading(false);
   };
@@ -81,6 +96,126 @@ export default function AdminEventsPage() {
     } finally { setCancellingId(null); }
   };
 
+  const openVendors = async (ev) => {
+     setVendorModal({ event: ev, vendors: [] });
+     try {
+       const r = await getEventVendors(ev.id);
+       setVendorModal({ event: ev, vendors: r.data });
+     } catch (err) {
+       setMsg({ type: 'error', text: 'Failed to fetch event vendors.' });
+     }
+  };
+
+  const handleAddVendor = async (e) => {
+     e.preventDefault();
+     setSaving(true);
+     try {
+       const payload = {
+          vendors: [{
+             vendorId: Number(vendorForm.vendorId),
+             purpose: vendorForm.purpose,
+             cost: Number(vendorForm.cost)
+          }]
+       };
+       await attachVendorsToEvent(vendorModal.event.id, payload);
+       const r = await getEventVendors(vendorModal.event.id);
+       setVendorModal({ ...vendorModal, vendors: r.data });
+       setVendorForm(emptyVendorForm);
+     } catch(err) {
+        setMsg({ type: 'error', text: 'Failed to assign vendor.' });
+     } finally { setSaving(false); }
+  };
+
+  const handleRemoveVendor = async (vendorId) => {
+     try {
+       await removeVendorFromEvent(vendorModal.event.id, vendorId);
+       const r = await getEventVendors(vendorModal.event.id);
+       setVendorModal({ ...vendorModal, vendors: r.data });
+     } catch(err) {
+       setMsg({ type: 'error', text: 'Failed to remove vendor.' });
+     }
+  };
+
+  const openBudgetView = async (ev) => {
+     setBudgetModal({ event: ev, budget: null, expenses: [] });
+      setBudgetForm(emptyBudgetForm);
+     try {
+       // Using Promise.allSettled or try/catch individual because budget service might be missing a budget initially
+       const [bReq, eReq] = await Promise.allSettled([
+           getBudgetByEvent(ev.id),
+           getExpensesByEvent(ev.id)
+       ]);
+       const bData = bReq.status === 'fulfilled' ? bReq.value.data : null;
+       const eData = eReq.status === 'fulfilled' ? eReq.value.data : [];
+       setBudgetModal({ event: ev, budget: bData, expenses: eData });
+       setBudgetForm({ totalBudget: bData?.totalBudget ? String(bData.totalBudget) : '' });
+     } catch (err) {
+       setMsg({ type: 'error', text: 'Failed to fetch budget details.' });
+     }
+  };
+
+  const handleSetBudget = async (e) => {
+     e.preventDefault();
+     if (!budgetForm.totalBudget) {
+       setMsg({ type: 'error', text: 'Enter total budget before saving.' });
+       return;
+     }
+
+     setSaving(true);
+     try {
+       await setBudgetForEvent(budgetModal.event.id, Number(budgetForm.totalBudget));
+       const [bReq, eReq] = await Promise.allSettled([
+         getBudgetByEvent(budgetModal.event.id),
+         getExpensesByEvent(budgetModal.event.id)
+       ]);
+       const bData = bReq.status === 'fulfilled' ? bReq.value.data : null;
+       const eData = eReq.status === 'fulfilled' ? eReq.value.data : [];
+       setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
+       setBudgetForm({ totalBudget: bData?.totalBudget ? String(bData.totalBudget) : budgetForm.totalBudget });
+     } catch (err) {
+       setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to set total budget.' });
+     } finally {
+       setSaving(false);
+     }
+  };
+
+  const handleAddExpense = async (e) => {
+     e.preventDefault();
+     setSaving(true);
+     try {
+        await addExpense({
+           eventId: budgetModal.event.id,
+           description: expenseForm.description,
+           amount: Number(expenseForm.amount)
+        });
+        const [bReq, eReq] = await Promise.allSettled([
+           getBudgetByEvent(budgetModal.event.id),
+           getExpensesByEvent(budgetModal.event.id)
+       ]);
+       const bData = bReq.status === 'fulfilled' ? bReq.value.data : null;
+       const eData = eReq.status === 'fulfilled' ? eReq.value.data : [];
+       setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
+       setExpenseForm(emptyExpenseForm);
+     } catch(err) {
+        setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to add expense.' });
+     } finally { setSaving(false); }
+  };
+
+  const handleRemoveExpense = async (expenseId) => {
+     try {
+       await deleteExpense(expenseId);
+       const [bReq, eReq] = await Promise.allSettled([
+           getBudgetByEvent(budgetModal.event.id),
+           getExpensesByEvent(budgetModal.event.id)
+       ]);
+       const bData = bReq.status === 'fulfilled' ? bReq.value.data : null;
+       const eData = eReq.status === 'fulfilled' ? eReq.value.data : [];
+       setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
+     } catch(err) {
+       setMsg({ type: 'error', text: 'Failed to remove expense.' });
+     }
+  };
+
   return (
     <div className="page-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -126,12 +261,21 @@ export default function AdminEventsPage() {
                   <td style={{ padding: '0.875rem 1rem', fontSize: '0.8rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{ev.ticketPrice?.toLocaleString()}</td>
                   <td style={{ padding: '0.875rem 1rem' }}><StatusBadge status={ev.status} /></td>
                   <td style={{ padding: '0.875rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button onClick={() => openEdit(ev)} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => openEdit(ev)} className="btn-secondary" style={{ padding: '0.35rem 0.5rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                         <Edit2 size={12} /> Edit
                       </button>
+                      
+                      <button onClick={() => openVendors(ev)} className="btn-secondary" style={{ padding: '0.35rem 0.5rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem', background: '#e0e7ff', color: '#3730a3', borderColor: '#c7d2fe' }}>
+                        <Truck size={12} /> Vendors
+                      </button>
+
+                      <button onClick={() => openBudgetView(ev)} className="btn-secondary" style={{ padding: '0.35rem 0.5rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem', background: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>
+                        <DollarSign size={12} /> Budget
+                      </button>
+
                       {ev.status !== 'CANCELLED' && ev.status !== 'COMPLETED' && (
-                        <button onClick={() => handleCancel(ev.id, ev.name)} disabled={cancellingId === ev.id} className="btn-danger" style={{ padding: '0.35rem 0.75rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <button onClick={() => handleCancel(ev.id, ev.name)} disabled={cancellingId === ev.id} className="btn-danger" style={{ padding: '0.35rem 0.5rem', fontSize: '0.775rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Trash2 size={12} /> {cancellingId === ev.id ? '…' : 'Cancel'}
                         </button>
                       )}
@@ -192,6 +336,128 @@ export default function AdminEventsPage() {
           </form>
         </Modal>
       )}
+
+      {vendorModal && (
+        <Modal title={`Manage Vendors: ${vendorModal.event.name}`} onClose={() => setVendorModal(null)} maxWidth="640px">
+          {vendorModal.vendors.length > 0 ? (
+            <div style={{ marginBottom: '1.5rem', background: '#f7f9fb', borderRadius: '8px', padding: '1rem', border: '1px solid #e1e4ed' }}>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>Assigned Vendors</h3>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {vendorModal.vendors.map(v => (
+                     <div key={v.vendorId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #e1e4ed' }}>
+                        <div>
+                           <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{v.vendorName}</div>
+                           <div style={{ fontSize: '0.75rem', color: '#737686' }}>{v.purpose} — ₹{v.cost?.toLocaleString()}</div>
+                        </div>
+                        <button onClick={() => handleRemoveVendor(v.vendorId)} className="btn-danger" style={{ padding: '0.2rem 0.4rem' }}>
+                           <Trash2 size={12} />
+                        </button>
+                     </div>
+                  ))}
+               </div>
+            </div>
+          ) : (
+             <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: '#737686', fontStyle: 'italic', marginBottom: '1rem' }}>No vendors attached to this event yet.</div>
+          )}
+
+          <form onSubmit={handleAddVendor} style={{ borderTop: '1px solid #e1e4ed', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Attach New Vendor</h3>
+            <div>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#434655', display: 'block', marginBottom: '0.3rem' }}>Select Vendor *</label>
+              <select required value={vendorForm.vendorId} onChange={(e) => setVendorForm({ ...vendorForm, vendorId: e.target.value })} className="input-field">
+                <option value="">— Choose —</option>
+                {allVendors.filter(av => !vendorModal.vendors.some(evv => evv.vendorId === av.id)).map(av => (
+                   <option key={av.id} value={av.id}>{av.name} ({av.serviceType})</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.875rem' }}>
+              <F label="Purpose *" required value={vendorForm.purpose} onChange={(e) => setVendorForm({ ...vendorForm, purpose: e.target.value })} placeholder="e.g. Stage Decoration" />
+              <F label="Cost (₹) *" type="number" required min={0} step="0.01" value={vendorForm.cost} onChange={(e) => setVendorForm({ ...vendorForm, cost: e.target.value })} />
+            </div>
+            <button type="submit" disabled={saving || !vendorForm.vendorId} className="btn-primary" style={{ padding: '0.625rem', marginTop: '0.5rem' }}>
+              {saving ? 'Adding...' : 'Attach Vendor'}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {budgetModal && (
+        <Modal title={`Budget: ${budgetModal.event.name}`} onClose={() => setBudgetModal(null)} maxWidth="640px">
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+             <div style={{ flex: 1, padding: '1rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase' }}>Total Budget</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0c4a6e' }}>₹{budgetModal.budget?.totalBudget ? Number(budgetModal.budget.totalBudget).toLocaleString() : '0.00'}</div>
+             </div>
+             <div style={{ flex: 1, padding: '1rem', background: '#fdf4ff', borderRadius: '8px', border: '1px solid #fbcfe8' }}>
+               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a21caf', textTransform: 'uppercase' }}>Estimated Cost</div>
+               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#701a75' }}>₹{budgetModal.budget?.estimatedCost ? Number(budgetModal.budget.estimatedCost).toLocaleString() : '0.00'}</div>
+             </div>
+             <div style={{ flex: 1, padding: '1rem', background: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a21caf', textTransform: 'uppercase' }}>Actual Cost</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#701a75' }}>₹{budgetModal.budget?.actualCost ? Number(budgetModal.budget.actualCost).toLocaleString() : '0.00'}</div>
+             </div>
+             <div style={{ flex: 1, padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase' }}>Remaining</div>
+               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#14532d' }}>₹{budgetModal.budget?.remainingBudget ? Number(budgetModal.budget.remainingBudget).toLocaleString() : '0.00'}</div>
+             </div>
+          </div>
+
+           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+             <div style={{ flex: 1, padding: '1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Revenue</div>
+               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e3a8a' }}>₹{budgetModal.budget?.revenue ? Number(budgetModal.budget.revenue).toLocaleString() : '0.00'}</div>
+             </div>
+             <div style={{ flex: 1, padding: '1rem', background: '#ecfeff', borderRadius: '8px', border: '1px solid #a5f3fc' }}>
+               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0e7490', textTransform: 'uppercase' }}>Profit</div>
+               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#164e63' }}>₹{budgetModal.budget?.profit ? Number(budgetModal.budget.profit).toLocaleString() : '0.00'}</div>
+             </div>
+           </div>
+
+           <form onSubmit={handleSetBudget} style={{ borderTop: '1px solid #e1e4ed', borderBottom: '1px solid #e1e4ed', padding: '1rem 0', display: 'grid', gridTemplateColumns: '2fr auto', gap: '0.875rem', alignItems: 'end', marginBottom: '1.5rem' }}>
+            <F label="Set Planned Budget (₹)" type="number" required min={0} step="0.01" value={budgetForm.totalBudget} onChange={(e) => setBudgetForm({ totalBudget: e.target.value })} />
+            <button type="submit" disabled={saving} className="btn-secondary" style={{ padding: '0.625rem 0.9rem' }}>
+              {saving ? 'Saving...' : 'Save Budget'}
+            </button>
+           </form>
+
+          <div style={{ marginBottom: '1.5rem', background: '#f7f9fb', borderRadius: '8px', padding: '1rem', border: '1px solid #e1e4ed' }}>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>Expenses</h3>
+               {budgetModal.expenses.length > 0 ? (
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {budgetModal.expenses.map(exp => (
+                       <div key={exp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #e1e4ed' }}>
+                          <div>
+                             <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{exp.description}</div>
+                             <div style={{ fontSize: '0.75rem', color: '#737686' }}>{new Date(exp.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                             <div style={{ fontWeight: 800, color: '#93000a' }}>- ₹{Number(exp.amount).toLocaleString()}</div>
+                             <button onClick={() => handleRemoveExpense(exp.id)} className="btn-danger" style={{ padding: '0.2rem 0.4rem' }}>
+                                <Trash2 size={12} />
+                             </button>
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+               ) : (
+                  <div style={{ textAlign: 'center', fontSize: '0.85rem', color: '#737686', fontStyle: 'italic' }}>No expenses recorded.</div>
+               )}
+          </div>
+
+          <form onSubmit={handleAddExpense} style={{ borderTop: '1px solid #e1e4ed', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Declare Expense</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.875rem' }}>
+              <F label="Description *" required value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} placeholder="e.g. Paid XYZ Catering" />
+              <F label="Amount (₹) *" type="number" required min={0.01} step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} />
+            </div>
+            <button type="submit" disabled={saving || !expenseForm.description || !expenseForm.amount} className="btn-primary" style={{ padding: '0.625rem', marginTop: '0.5rem' }}>
+              {saving ? 'Adding...' : 'Add Expense'}
+            </button>
+          </form>
+        </Modal>
+      )}
+
     </div>
   );
 }

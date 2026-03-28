@@ -2,32 +2,54 @@ const { Expense, EventBudget, sequelize } = require('../models');
 
 const toMoney = (value) => Number.parseFloat(value || 0).toFixed(2);
 
-const createBudget = async ({ eventId, totalBudget }) => {
-  const existing = await EventBudget.findOne({ where: { eventId } });
-  if (existing) {
-    const error = new Error('Budget already exists for this eventId');
-    error.status = 409;
-    throw error;
+const upsertEstimatedCost = async ({ eventId, estimatedCost }) => {
+  const budget = await EventBudget.findOne({ where: { eventId } });
+
+  if (!budget) {
+    return EventBudget.create({
+      eventId,
+      estimatedCost,
+      totalBudget: null,
+      actualCost: 0,
+      revenue: 0,
+    });
   }
 
-  const budget = await EventBudget.create({
-    eventId,
-    totalBudget,
-    actualCost: 0,
-  });
-
+  await budget.update({ estimatedCost });
   return budget;
 };
 
-const updateBudgetByEventId = async (eventId, totalBudget) => {
+const setTotalBudget = async ({ eventId, totalBudget }) => {
   const budget = await EventBudget.findOne({ where: { eventId } });
+
   if (!budget) {
-    const error = new Error('Budget not found for this eventId');
-    error.status = 404;
-    throw error;
+    return EventBudget.create({
+      eventId,
+      estimatedCost: 0,
+      totalBudget,
+      actualCost: 0,
+      revenue: 0,
+    });
   }
 
   await budget.update({ totalBudget });
+  return budget;
+};
+
+const syncRevenue = async ({ eventId, revenue }) => {
+  const budget = await EventBudget.findOne({ where: { eventId } });
+
+  if (!budget) {
+    return EventBudget.create({
+      eventId,
+      estimatedCost: 0,
+      totalBudget: null,
+      actualCost: 0,
+      revenue,
+    });
+  }
+
+  await budget.update({ revenue });
   return budget;
 };
 
@@ -39,15 +61,21 @@ const getBudgetByEventId = async (eventId) => {
     throw error;
   }
 
-  const totalBudget = Number.parseFloat(budget.totalBudget);
+  const totalBudget = budget.totalBudget === null ? null : Number.parseFloat(budget.totalBudget);
+  const estimatedCost = Number.parseFloat(budget.estimatedCost);
   const actualCost = Number.parseFloat(budget.actualCost);
-  const remaining = (totalBudget - actualCost).toFixed(2);
+  const revenue = Number.parseFloat(budget.revenue);
+  const remainingBudget = totalBudget === null ? null : (totalBudget - actualCost).toFixed(2);
+  const profit = (revenue - actualCost).toFixed(2);
 
   return {
     eventId: budget.eventId,
-    totalBudget: toMoney(totalBudget),
+    totalBudget: totalBudget === null ? null : toMoney(totalBudget),
+    estimatedCost: toMoney(estimatedCost),
     actualCost: toMoney(actualCost),
-    remaining,
+    revenue: toMoney(revenue),
+    remainingBudget,
+    profit,
   };
 };
 
@@ -136,8 +164,9 @@ const deleteExpenseById = async (expenseId) => {
 };
 
 module.exports = {
-  createBudget,
-  updateBudgetByEventId,
+  upsertEstimatedCost,
+  setTotalBudget,
+  syncRevenue,
   getBudgetByEventId,
   addExpense,
   getExpensesByEventId,

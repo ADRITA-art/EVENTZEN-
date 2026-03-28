@@ -14,3 +14,9 @@ export const createEvent = (data) => api.post('/events', data);
 export const updateEvent = (id, data) => api.put(`/events/${id}`, data);
 
 export const cancelEvent = (id) => api.delete(`/events/${id}`);
+
+export const getEventVendors = (id) => api.get(`/events/${id}/vendors`);
+
+export const attachVendorsToEvent = (id, payload) => api.post(`/events/${id}/vendors`, payload);
+
+export const removeVendorFromEvent = (eventId, vendorId) => api.delete(`/events/${eventId}/vendors/${vendorId}`);

@@ -66,8 +66,8 @@ public class EventServiceImpl implements EventService {
         Event saved = eventRepository.save(event);
         EventResponse response = mapToResponse(saved);
 
-        // Keep budget-service in sync when a new event is created.
-        budgetClient.createBudgetForEvent(saved.getId(), response.getTotalCost());
+        // Keep budget-service in sync when planning estimates change.
+        budgetClient.upsertEstimatedCostForEvent(saved.getId(), response.getTotalCost());
         return response;
     }
 
@@ -91,8 +91,8 @@ public class EventServiceImpl implements EventService {
         Event updated = eventRepository.save(event);
         EventResponse response = mapToResponse(updated);
 
-        // Update budget-service when event costs change during event updates.
-        budgetClient.updateBudgetForEvent(updated.getId(), response.getTotalCost());
+        // Update planning estimate in budget-service when event costs change.
+        budgetClient.upsertEstimatedCostForEvent(updated.getId(), response.getTotalCost());
         return response;
     }
 

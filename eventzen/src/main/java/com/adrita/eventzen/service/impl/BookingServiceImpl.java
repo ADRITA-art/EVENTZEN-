@@ -10,6 +10,7 @@ import com.adrita.eventzen.entity.Event;
 import com.adrita.eventzen.entity.EventStatus;
 import com.adrita.eventzen.entity.User;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.integration.budget.BudgetClient;
 import com.adrita.eventzen.repository.BookingRepository;
 import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.UserRepository;
@@ -28,13 +29,16 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final EventRepository eventRepository;
+    private final BudgetClient budgetClient;
 
     public BookingServiceImpl(BookingRepository bookingRepository,
                               UserRepository userRepository,
-                              EventRepository eventRepository) {
+                              EventRepository eventRepository,
+                              BudgetClient budgetClient) {
         this.bookingRepository = bookingRepository;
         this.userRepository = userRepository;
         this.eventRepository = eventRepository;
+        this.budgetClient = budgetClient;
     }
 
     @Override
@@ -66,6 +70,7 @@ public class BookingServiceImpl implements BookingService {
         updateEventTicketAvailability(event, request.getNumberOfSeats());
 
         Booking saved = bookingRepository.save(booking);
+        syncEventRevenue(event.getId());
         return mapToResponse(saved);
     }
 
@@ -95,6 +100,7 @@ public class BookingServiceImpl implements BookingService {
 
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
+        syncEventRevenue(booking.getEvent().getId());
     }
 
     @Override
@@ -135,6 +141,7 @@ public class BookingServiceImpl implements BookingService {
 
         booking.setStatus(newStatus);
         Booking updated = bookingRepository.save(booking);
+        syncEventRevenue(updated.getEvent().getId());
         return mapToResponse(updated);
     }
 
@@ -219,6 +226,14 @@ public class BookingServiceImpl implements BookingService {
         }
 
         eventRepository.save(event);
+    }
+
+    private void syncEventRevenue(Long eventId) {
+        BigDecimal revenue = bookingRepository.sumTotalPriceByEventIdAndStatus(eventId, BookingStatus.CONFIRMED);
+        if (revenue == null) {
+            revenue = BigDecimal.ZERO;
+        }
+        budgetClient.syncRevenueForEvent(eventId, revenue);
     }
 
     private BookingResponse mapToResponse(Booking booking) {

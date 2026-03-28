@@ -15,5 +15,9 @@ public interface VendorService {
 
     List<VendorResponse> getAllVendors();
 
+    List<VendorResponse> getAllActiveVendors();
+
     VendorResponse getVendorById(Long id);
+
+    VendorResponse getActiveVendorById(Long id);
 }

@@ -2,10 +2,13 @@ package com.adrita.eventzen.controller;
 
 import com.adrita.eventzen.dto.VendorRequest;
 import com.adrita.eventzen.dto.VendorResponse;
+import com.adrita.eventzen.entity.Role;
+import com.adrita.eventzen.entity.User;
 import com.adrita.eventzen.service.VendorService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,13 +37,23 @@ public class VendorController {
     }
 
     @GetMapping
-    public ResponseEntity<List<VendorResponse>> getAllVendors() {
-        return ResponseEntity.ok(vendorService.getAllVendors());
+    public ResponseEntity<List<VendorResponse>> getAllVendors(
+            @AuthenticationPrincipal User user) {
+        if (user.getRole() == Role.ADMIN) {
+            return ResponseEntity.ok(vendorService.getAllVendors());
+        }
+
+        return ResponseEntity.ok(vendorService.getAllActiveVendors());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<VendorResponse> getVendorById(@PathVariable Long id) {
-        return ResponseEntity.ok(vendorService.getVendorById(id));
+    public ResponseEntity<VendorResponse> getVendorById(@PathVariable Long id,
+                                                        @AuthenticationPrincipal User user) {
+        if (user.getRole() == Role.ADMIN) {
+            return ResponseEntity.ok(vendorService.getVendorById(id));
+        }
+
+        return ResponseEntity.ok(vendorService.getActiveVendorById(id));
     }
 
     @PutMapping("/{id}")

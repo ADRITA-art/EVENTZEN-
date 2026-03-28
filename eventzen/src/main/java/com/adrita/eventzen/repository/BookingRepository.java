@@ -27,4 +27,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     Integer sumBookedSeatsByEventIdAndStatus(@Param("eventId") Long eventId,
                                              @Param("status") BookingStatus status);
+
+    @Query("""
+            SELECT COALESCE(SUM(b.totalPrice), 0)
+            FROM Booking b
+            WHERE b.event.id = :eventId
+              AND b.status = :status
+            """)
+    java.math.BigDecimal sumTotalPriceByEventIdAndStatus(@Param("eventId") Long eventId,
+                                                          @Param("status") BookingStatus status);
 }

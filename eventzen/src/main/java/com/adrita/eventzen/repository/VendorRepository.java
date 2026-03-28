@@ -8,4 +8,6 @@ import java.util.List;
 public interface VendorRepository extends JpaRepository<Vendor, Long> {
 
     List<Vendor> findByActiveTrue();
+
+    java.util.Optional<Vendor> findByIdAndActiveTrue(Long id);
 }

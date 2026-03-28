@@ -18,8 +18,10 @@ import MyBookingsPage from './pages/customer/MyBookingsPage';
 // Admin pages
 import UsersPage from './pages/admin/UsersPage';
 import VenuesPage from './pages/admin/VenuesPage';
+import VendorsPage from './pages/admin/VendorsPage';
 import AdminEventsPage from './pages/admin/AdminEventsPage';
 import AdminBookingsPage from './pages/admin/AdminBookingsPage';
+import LandingPage from './pages/LandingPage';
 
 export default function App() {
   return (
@@ -27,6 +29,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           {/* Public */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
@@ -55,6 +58,7 @@ export default function App() {
             <Route index element={<Navigate to="/admin/users" replace />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="venues" element={<VenuesPage />} />
+            <Route path="vendors" element={<VendorsPage />} />
             <Route path="events" element={<AdminEventsPage />} />
             <Route path="bookings" element={<AdminBookingsPage />} />
             <Route path="profile" element={<ProfilePage />} />

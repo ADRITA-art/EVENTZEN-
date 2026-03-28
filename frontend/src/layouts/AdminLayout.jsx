@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Users, MapPin, CalendarDays, Ticket, User, LogOut, Zap, LayoutDashboard } from 'lucide-react';
+import { Users, MapPin, CalendarDays, Ticket, User, LogOut, Zap, LayoutDashboard, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { to: '/admin/users',    icon: Users,         label: 'Users' },
   { to: '/admin/venues',   icon: MapPin,        label: 'Venues' },
+  { to: '/admin/vendors',  icon: Truck,         label: 'Vendors' },
   { to: '/admin/events',   icon: CalendarDays,  label: 'Events' },
   { to: '/admin/bookings', icon: Ticket,        label: 'Bookings' },
   { to: '/admin/profile',  icon: User,          label: 'Profile' },

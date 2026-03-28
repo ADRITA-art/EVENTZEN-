@@ -2,6 +2,7 @@ package com.adrita.eventzen.integration;
 
 import com.adrita.eventzen.entity.Venue;
 import com.adrita.eventzen.entity.VenueType;
+import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.VenueRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.Dispatcher;
@@ -24,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,13 +38,18 @@ class EventBudgetIntegrationTest {
 
     private static final MockWebServer BUDGET_SERVER = new MockWebServer();
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Map<Long, BigDecimal> BUDGETS = new ConcurrentHashMap<>();
+    private static final Map<Long, BigDecimal> ESTIMATED_COSTS = new ConcurrentHashMap<>();
+    private static final AtomicBoolean FAIL_MUTATIONS = new AtomicBoolean(false);
+    private static final String INTERNAL_KEY = "test-internal-key";
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private VenueRepository venueRepository;
+
+    @Autowired
+    private EventRepository eventRepository;
 
     @BeforeAll
     static void beforeAll() throws Exception {
@@ -56,36 +63,39 @@ class EventBudgetIntegrationTest {
                         return jsonResponse(200, Map.of("status", "ok"));
                     }
 
-                    if ("POST".equals(request.getMethod()) && "/api/budget".equals(path)) {
-                        Map<String, Object> payload = MAPPER.readValue(request.getBody().readUtf8(), Map.class);
-                        Long eventId = Long.valueOf(String.valueOf(payload.get("eventId")));
-                        BigDecimal totalBudget = new BigDecimal(String.valueOf(payload.get("totalBudget")));
-                        BUDGETS.put(eventId, totalBudget);
-                        return jsonResponse(201, Map.of("eventId", eventId, "totalBudget", totalBudget));
+                    if (path != null && path.startsWith("/api/")) {
+                        String authHeader = request.getHeader("Authorization");
+                        if (authHeader == null || !authHeader.equals("Internal-Service-Key " + INTERNAL_KEY)) {
+                            return new MockResponse().setResponseCode(401);
+                        }
                     }
 
-                    if ("PUT".equals(request.getMethod()) && path != null && path.startsWith("/api/budget/")) {
-                        Long eventId = Long.valueOf(path.substring("/api/budget/".length()));
-                        if (!BUDGETS.containsKey(eventId)) {
-                            return new MockResponse().setResponseCode(404);
+                    if ("POST".equals(request.getMethod()) && "/api/budget/estimate".equals(path)) {
+                        if (FAIL_MUTATIONS.get()) {
+                            return new MockResponse().setResponseCode(503);
                         }
+
                         Map<String, Object> payload = MAPPER.readValue(request.getBody().readUtf8(), Map.class);
-                        BigDecimal totalBudget = new BigDecimal(String.valueOf(payload.get("totalBudget")));
-                        BUDGETS.put(eventId, totalBudget);
-                        return jsonResponse(200, Map.of("eventId", eventId, "totalBudget", totalBudget));
+                        Long eventId = Long.valueOf(String.valueOf(payload.get("eventId")));
+                        BigDecimal estimatedCost = new BigDecimal(String.valueOf(payload.getOrDefault("estimatedCost", "0")));
+                        ESTIMATED_COSTS.put(eventId, estimatedCost);
+                        return jsonResponse(200, Map.of("eventId", eventId, "estimatedCost", estimatedCost));
                     }
 
                     if ("GET".equals(request.getMethod()) && path != null && path.startsWith("/api/budget/")) {
                         Long eventId = Long.valueOf(path.substring("/api/budget/".length()));
-                        BigDecimal totalBudget = BUDGETS.get(eventId);
-                        if (totalBudget == null) {
+                        BigDecimal estimatedCost = ESTIMATED_COSTS.get(eventId);
+                        if (estimatedCost == null) {
                             return new MockResponse().setResponseCode(404);
                         }
                         return jsonResponse(200, Map.of(
                                 "eventId", eventId,
-                                "totalBudget", totalBudget,
+                                "estimatedCost", estimatedCost,
+                                "totalBudget", BigDecimal.ZERO,
                                 "actualCost", BigDecimal.ZERO,
-                                "remaining", totalBudget
+                                "revenue", BigDecimal.ZERO,
+                                "remainingBudget", BigDecimal.ZERO,
+                                "profit", BigDecimal.ZERO
                         ));
                     }
 
@@ -123,12 +133,15 @@ class EventBudgetIntegrationTest {
         registry.add("jwt.expiration", () -> "86400000");
         registry.add("app.cors.allowed-origins", () -> "http://localhost:3000");
         registry.add("budget.service.base-url", () -> BUDGET_SERVER.url("/").toString());
+        registry.add("budget.service.internal-key", () -> INTERNAL_KEY);
     }
 
     @BeforeEach
     void setUp() {
+        eventRepository.deleteAll();
         venueRepository.deleteAll();
-        BUDGETS.clear();
+        ESTIMATED_COSTS.clear();
+        FAIL_MUTATIONS.set(false);
     }
 
     @Test
@@ -170,8 +183,45 @@ class EventBudgetIntegrationTest {
         mockMvc.perform(get("/readiness"))
                 .andExpect(status().isOk());
 
-        BigDecimal budgetValue = BUDGETS.get(eventId);
-        assertThat(budgetValue).isNotNull();
-        assertThat(budgetValue).isEqualByComparingTo(new BigDecimal("10000.00"));
+        BigDecimal estimatedCost = ESTIMATED_COSTS.get(eventId);
+        assertThat(estimatedCost).isNotNull();
+        assertThat(estimatedCost).isEqualByComparingTo(new BigDecimal("10000.00"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void createEventShouldRollbackWhenBudgetServiceFails() throws Exception {
+        FAIL_MUTATIONS.set(true);
+
+        Venue venue = new Venue();
+        venue.setName("Grand Hall");
+        venue.setState("Karnataka");
+        venue.setCity("Bengaluru");
+        venue.setCountry("India");
+        venue.setType(VenueType.HALL);
+        venue.setCapacity(500);
+        venue.setPricePerHour(new BigDecimal("2500.00"));
+        Venue savedVenue = venueRepository.save(venue);
+
+        String body = """
+                {
+                  \"name\": \"Tech Fest Failure Case\",
+                  \"description\": \"Annual event\",
+                  \"eventDate\": \"2026-08-20\",
+                  \"startTime\": \"10:00:00\",
+                  \"endTime\": \"14:00:00\",
+                  \"venueId\": %d,
+                  \"ticketPrice\": 1500.00,
+                  \"maxCapacity\": 450
+                }
+                """.formatted(savedVenue.getId());
+
+        mockMvc.perform(post("/events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isServiceUnavailable());
+
+        assertThat(eventRepository.count()).isZero();
+        assertThat(ESTIMATED_COSTS).isEmpty();
     }
 }

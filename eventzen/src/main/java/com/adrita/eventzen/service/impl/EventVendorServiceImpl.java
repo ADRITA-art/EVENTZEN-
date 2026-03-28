@@ -8,6 +8,7 @@ import com.adrita.eventzen.entity.EventVendor;
 import com.adrita.eventzen.entity.Vendor;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.integration.budget.BudgetClient;
 import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.EventVendorRepository;
 import com.adrita.eventzen.repository.VendorRepository;
@@ -15,6 +16,8 @@ import com.adrita.eventzen.service.EventVendorService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,13 +28,16 @@ public class EventVendorServiceImpl implements EventVendorService {
     private final EventRepository eventRepository;
     private final VendorRepository vendorRepository;
     private final EventVendorRepository eventVendorRepository;
+    private final BudgetClient budgetClient;
 
     public EventVendorServiceImpl(EventRepository eventRepository,
                                   VendorRepository vendorRepository,
-                                  EventVendorRepository eventVendorRepository) {
+                                  EventVendorRepository eventVendorRepository,
+                                  BudgetClient budgetClient) {
         this.eventRepository = eventRepository;
         this.vendorRepository = vendorRepository;
         this.eventVendorRepository = eventVendorRepository;
+        this.budgetClient = budgetClient;
     }
 
     @Override
@@ -46,7 +52,7 @@ public class EventVendorServiceImpl implements EventVendorService {
                 throw new DuplicateResourceException("Duplicate vendor in request: " + item.getVendorId());
             }
 
-            Vendor vendor = vendorRepository.findById(item.getVendorId())
+                Vendor vendor = vendorRepository.findByIdAndActiveTrue(item.getVendorId())
                     .orElseThrow(() -> new ResourceNotFoundException("Vendor not found with id: " + item.getVendorId()));
 
             if (eventVendorRepository.existsByEvent_IdAndVendor_Id(eventId, item.getVendorId())) {
@@ -61,9 +67,12 @@ public class EventVendorServiceImpl implements EventVendorService {
             eventVendorRepository.save(mapping);
         }
 
-        return eventVendorRepository.findAllByEventIdWithVendor(eventId).stream()
+        List<EventVendorResponse> responses = eventVendorRepository.findAllByEventIdWithVendor(eventId).stream()
                 .map(this::mapToResponse)
                 .toList();
+
+        syncEstimatedCost(event, responses);
+        return responses;
     }
 
     @Override
@@ -86,7 +95,28 @@ public class EventVendorServiceImpl implements EventVendorService {
                 .orElseThrow(() -> new ResourceNotFoundException("Vendor mapping not found for eventId " + eventId + " and vendorId " + vendorId));
 
         eventVendorRepository.delete(mapping);
+
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + eventId));
+
+        List<EventVendorResponse> responses = eventVendorRepository.findAllByEventIdWithVendor(eventId).stream()
+            .map(this::mapToResponse)
+            .toList();
+        syncEstimatedCost(event, responses);
     }
+
+        private void syncEstimatedCost(Event event, List<EventVendorResponse> vendors) {
+        BigDecimal vendorCost = vendors.stream()
+            .map(EventVendorResponse::getCost)
+            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal venueCost = event.getVenueCost() == null
+            ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+            : event.getVenueCost().setScale(2, RoundingMode.HALF_UP);
+
+        budgetClient.upsertEstimatedCostForEvent(event.getId(), venueCost.add(vendorCost));
+        }
 
     private EventVendorResponse mapToResponse(EventVendor mapping) {
         Vendor vendor = mapping.getVendor();

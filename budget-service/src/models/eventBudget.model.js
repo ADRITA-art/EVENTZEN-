@@ -17,15 +17,33 @@ const EventBudget = sequelize.define(
         min: 1,
       },
     },
-    totalBudget: {
+    estimatedCost: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
+      defaultValue: 0,
+      validate: {
+        isDecimal: true,
+        min: 0,
+      },
+    },
+    totalBudget: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
       validate: {
         isDecimal: true,
         min: 0,
       },
     },
     actualCost: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      validate: {
+        isDecimal: true,
+        min: 0,
+      },
+    },
+    revenue: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0,
