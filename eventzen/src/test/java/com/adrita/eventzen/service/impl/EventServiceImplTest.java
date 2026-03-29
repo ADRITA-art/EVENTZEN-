@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -79,7 +80,7 @@ class EventServiceImplTest {
         validRequest.setTicketPrice(new BigDecimal("99.00"));
         validRequest.setMaxCapacity(300);
 
-        when(eventVendorRepository.findAllByEventIdWithVendor(any())).thenReturn(List.of());
+        lenient().when(eventVendorRepository.findAllByEventIdWithVendor(any())).thenReturn(List.of());
     }
 
     @Test
