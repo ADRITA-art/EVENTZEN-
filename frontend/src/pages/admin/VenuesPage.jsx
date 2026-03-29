@@ -3,6 +3,12 @@ import { Plus, Edit2, Trash2, MapPin, AlertCircle, CheckCircle, X } from 'lucide
 import { getVenues, createVenue, updateVenue, deleteVenue } from '../../api/venues';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import {
+  isNonNegativeNumber,
+  isPositiveInteger,
+  isRequiredText,
+  toTrimmed,
+} from '../../utils/validation';
 
 const VENUE_TYPES = ['HALL', 'AUDITORIUM', 'STADIUM', 'CONFERENCE_ROOM', 'OUTDOOR', 'OTHER'];
 
@@ -36,8 +42,55 @@ export default function VenuesPage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    if (!isRequiredText(form.name)) {
+      setMsg({ type: 'error', text: 'Venue name is required.' });
+      return;
+    }
+    if (!isRequiredText(form.city)) {
+      setMsg({ type: 'error', text: 'City is required.' });
+      return;
+    }
+    if (!isRequiredText(form.state)) {
+      setMsg({ type: 'error', text: 'State is required.' });
+      return;
+    }
+    if (!isRequiredText(form.country)) {
+      setMsg({ type: 'error', text: 'Country is required.' });
+      return;
+    }
+    if (!isPositiveInteger(form.capacity)) {
+      setMsg({ type: 'error', text: 'Capacity must be a positive whole number.' });
+      return;
+    }
+    if (!isNonNegativeNumber(form.pricePerHour)) {
+      setMsg({ type: 'error', text: 'Price per hour must be 0 or greater.' });
+      return;
+    }
+    if (toTrimmed(form.rating) && !isNonNegativeNumber(form.rating)) {
+      setMsg({ type: 'error', text: 'Rating must be a number between 0 and 5.' });
+      return;
+    }
+    if (toTrimmed(form.rating) && Number(form.rating) > 5) {
+      setMsg({ type: 'error', text: 'Rating cannot be greater than 5.' });
+      return;
+    }
+
     setSaving(true);
-    const payload = { ...form, capacity: Number(form.capacity), pricePerHour: Number(form.pricePerHour), rating: form.rating ? Number(form.rating) : undefined };
+    const payload = {
+      ...form,
+      name: toTrimmed(form.name),
+      state: toTrimmed(form.state),
+      city: toTrimmed(form.city),
+      country: toTrimmed(form.country),
+      pincode: toTrimmed(form.pincode),
+      address: toTrimmed(form.address),
+      description: toTrimmed(form.description),
+      amenities: toTrimmed(form.amenities),
+      capacity: Number(form.capacity),
+      pricePerHour: Number(form.pricePerHour),
+      rating: toTrimmed(form.rating) ? Number(form.rating) : undefined,
+    };
     try {
       if (modal.mode === 'create') await createVenue(payload);
       else await updateVenue(modal.venue.id, payload);

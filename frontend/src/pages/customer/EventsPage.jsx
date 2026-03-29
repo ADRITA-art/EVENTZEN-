@@ -4,11 +4,13 @@ import { getUpcomingEvents, searchEvents } from '../../api/events';
 import StatusBadge from '../../components/ui/StatusBadge';
 import BookNowModal from '../../components/customer/BookNowModal';
 import Spinner from '../../components/ui/Spinner';
+import { isValidIsoDate, toTrimmed } from '../../utils/validation';
 
 export default function EventsPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState({ location: '', date: '' });
+  const [searchError, setSearchError] = useState('');
   const [selectedEvent, setSelectedEvent] = useState(null);
 
   const load = async () => {
@@ -24,9 +26,18 @@ export default function EventsPage() {
 
   const handleSearch = async (e) => {
     e.preventDefault();
+    setSearchError('');
+
+    const normalizedLocation = toTrimmed(search.location);
+    const normalizedDate = toTrimmed(search.date);
+    if (normalizedDate && !isValidIsoDate(normalizedDate)) {
+      setSearchError('Please provide a valid date for search.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await searchEvents(search.date || undefined, search.location || undefined);
+      const res = await searchEvents(normalizedDate || undefined, normalizedLocation || undefined);
       setEvents(res.data);
     } catch (_) {}
     setLoading(false);
@@ -34,6 +45,7 @@ export default function EventsPage() {
 
   const handleClearSearch = () => {
     setSearch({ location: '', date: '' });
+    setSearchError('');
     load();
   };
 
@@ -88,6 +100,9 @@ export default function EventsPage() {
         <button type="button" onClick={handleClearSearch} className="btn-secondary" style={{ padding: '0.625rem 1rem' }}>
           Clear
         </button>
+        {searchError && (
+          <div style={{ width: '100%', color: '#93000a', fontSize: '0.8rem', marginTop: '0.25rem' }}>{searchError}</div>
+        )}
       </form>
 
       {/* Events Grid */}

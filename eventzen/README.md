@@ -1,563 +1,548 @@
-# Eventzen API Documentation
+# EventZen Backend
 
-This document lists all currently available APIs in the project.
+A comprehensive Spring Boot backend for an event management platform.
 
-## Base URL
+## 1. Project Overview
 
-- Local: `http://localhost:8080`
+EventZen is a backend system for managing end-to-end event operations, from planning and venue scheduling to vendor assignment and ticket booking. It is designed for both real-world developer onboarding and academic evaluation with clear business rules, layered architecture, and secure API design.
 
-## Authentication
+Primary goals:
 
-- JWT-based authentication using `Authorization: Bearer <token>`.
-- Public endpoints:
-  - `POST /auth/register`
-  - `POST /auth/login`
-- All other endpoints require a valid JWT.
-- Admin-only endpoints use role check: `ADMIN`.
-- Event management endpoints (`POST/PUT/DELETE /events`) are admin-only.
-- Event view endpoints (`GET /events...`) are accessible to authenticated users (admin and customer).
+- Manage users with role-aware access (Admin and Customer).
+- Manage events, including scheduling, venue assignment, capacity, and pricing.
+- Manage venues and vendors for event logistics.
+- Support ticket-based booking workflows with capacity enforcement.
+- Integrate with an external Budget Service microservice for estimated cost, expense tracking, and revenue synchronization.
 
-## Roles
+## 2. Architecture
 
-- `ADMIN`
-- `CUSTOMER`
+EventZen follows a classic layered architecture:
 
-## API Endpoints
+1. Controller Layer: Defines REST endpoints, input validation trigger points (`@Valid`), and role-based access via `@PreAuthorize`.
+2. Service Layer: Encapsulates business logic (time conflict checks, capacity rules, ticket availability, password changes, booking lifecycle, integration orchestration).
+3. Repository Layer: Uses Spring Data JPA repositories for persistence and query abstractions.
 
-### 1) Register
+### Technology and Data Access
 
-- **Method:** `POST`
-- **Path:** `/auth/register`
-- **Auth:** Public
+- Spring Boot 3 (web, validation, security)
+- Spring Data JPA + Hibernate ORM
+- MySQL as the primary transactional database
 
-Request body:
+### Microservice Integration (Budget Service)
 
-```json
-{
-  "name": "Alice",
-  "email": "alice@example.com",
-  "password": "secret123",
-  "role": "CUSTOMER"
-}
-```
+EventZen integrates with a separate Budget Service through REST calls using Spring `RestClient`.
 
-Success response:
+Integration capabilities:
 
-```json
-"User registered successfully"
-```
+- Upsert event estimated cost during event planning/vendor updates.
+- Set total budget for an event.
+- Fetch budget by event.
+- Add and delete expenses.
+- Sync event revenue based on confirmed bookings.
+- Readiness health dependency check for budget service availability.
 
-Notes:
-- `email` must be valid.
-- `password` minimum length is 6.
+### Containerization
 
-### 2) Login
+- A Dockerfile is provided for backend image build and runtime.
+- Root-level Docker Compose orchestrates EventZen backend, MySQL, frontend, budget service, and budget database.
 
-- **Method:** `POST`
-- **Path:** `/auth/login`
-- **Auth:** Public
+## 3. Features and Capabilities
 
-Request body:
+### Authentication and Authorization
 
-```json
-{
-  "email": "alice@example.com",
-  "password": "secret123"
-}
-```
+- User registration and login with JWT issuance.
+- Role model: `ADMIN`, `CUSTOMER`.
+- Method-level security for privileged operations.
 
-Success response:
-
-```json
-{
-  "token": "<jwt-token>",
-  "role": "CUSTOMER"
-}
-```
+### Event Management
 
-### 3) Get My Profile
+- Create, update, and cancel events.
+- Search events by date/location.
+- List upcoming events.
+- Venue-based event listing.
 
-- **Method:** `GET`
-- **Path:** `/auth/me`
-- **Auth:** JWT required
+### Venue Management
 
-Success response:
+- Create, update, delete venues (admin).
+- Active venue listing and filtered search by location/capacity.
 
-```json
-{
-  "id": 1,
-  "name": "Alice",
-  "email": "alice@example.com",
-  "role": "CUSTOMER"
-}
-```
+### Vendor Management
 
-### 4) Change Password
+- Create, update, soft-delete vendors (admin).
+- Role-aware listing (admins can view all; customers get active-only).
+- Attach and remove vendors per event with duplicate prevention.
 
-- **Method:** `PUT`
-- **Path:** `/auth/change-password`
-- **Auth:** JWT required
+### Booking System
 
-Request body:
-
-```json
-{
-  "oldPassword": "1234",
-  "newPassword": "abcd"
-}
-```
-
-Logic:
-- User is resolved from JWT.
-- `oldPassword` is verified against stored encoded password.
-- Password is updated using encoded `newPassword`.
-
-Success response:
-
-```json
-"Password updated successfully"
-```
-
-### 5) Update My Profile
-
-- **Method:** `PUT`
-- **Path:** `/users/me`
-- **Auth:** JWT required
-
-Request body:
-
-```json
-{
-  "name": "New Name"
-}
-```
-
-Success response:
-
-```json
-{
-  "id": 1,
-  "name": "New Name",
-  "email": "alice@example.com",
-  "role": "CUSTOMER"
-}
-```
-
-### 6) Get All Users (Admin)
-
-- **Method:** `GET`
-- **Path:** `/admin/users`
-- **Auth:** JWT required + `ADMIN`
-
-Success response:
-
-```json
-[
-  {
-    "id": 1,
-    "name": "Admin User",
-    "email": "admin@example.com",
-    "role": "ADMIN"
-  },
-  {
-    "id": 2,
-    "name": "Customer User",
-    "email": "customer@example.com",
-    "role": "CUSTOMER"
-  }
-]
-```
-
-### 7) Get User by ID (Admin)
-
-- **Method:** `GET`
-- **Path:** `/users/{id}`
-- **Auth:** JWT required + `ADMIN`
-
-Example:
-- `GET /users/2`
-
-Success response:
+- Ticket booking by customers.
+- Customer booking history.
+- Booking cancellation.
+- Admin booking oversight, status updates, and event booking summary.
 
-```json
-{
-  "id": 2,
-  "name": "Customer User",
-  "email": "customer@example.com",
-  "role": "CUSTOMER"
-}
-```
-
-### 8) Delete User by ID (Admin)
+### Operational and Platform Features
 
-- **Method:** `DELETE`
-- **Path:** `/users/{id}`
-- **Auth:** JWT required + `ADMIN`
+- Readiness endpoint (`/readiness`) that reports Budget Service dependency health.
+- Soft-delete semantics:
+  - Events are cancelled via status update (`CANCELLED`) instead of hard delete.
+  - Vendors are deactivated (`is_active=false`) instead of hard delete.
+- Role-aware data visibility:
+  - Vendor listing returns all vendors for admins, active-only vendors for customers.
+  - Event listing exposes only visible statuses (`ACTIVE`, `SOLD_OUT`).
+- Automatic lifecycle/status updates:
+  - Event moves between `ACTIVE` and `SOLD_OUT` based on ticket availability.
+  - Booking status transitions (`CONFIRMED`, `CANCELLED`) update seat inventory.
+- Cost/revenue synchronization with Budget Service on planning and booking changes.
+- CORS configuration through environment variables for frontend integration.
 
-Example:
-- `DELETE /users/2`
+### Budget Integration
 
-Success response:
+- Admin APIs to interact with budget and expense records.
+- Automatic revenue sync from confirmed bookings.
+- Automatic estimated cost sync from event and vendor changes.
 
-```json
-"User deleted successfully"
-```
+## 4. Security
 
-### 9) Create Venue (Admin)
+### Password Security
 
-- **Method:** `POST`
-- **Path:** `/venues`
-- **Auth:** JWT required + `ADMIN`
+- Passwords are encoded with BCrypt (`BCryptPasswordEncoder`).
+- Additional application-level salting is applied via `PasswordSecurityService`.
+- Legacy password migration support is implemented during login.
 
-Request body:
+### JWT Authentication
 
-```json
-{
-  "name": "Grand Hall",
-  "state": "Karnataka",
-  "city": "Bengaluru",
-  "country": "India",
-  "pincode": "560001",
-  "address": "MG Road",
-  "type": "HALL",
-  "capacity": 500,
-  "description": "Premium indoor venue",
-  "amenities": "AC, Parking, WiFi",
-  "pricePerHour": 2500.00,
-  "rating": 4.5,
-  "imageUrl": "https://example.com/venue.jpg",
-  "isActive": true
-}
-```
-
-Success response:
-- Returns created venue object.
-
-### 10) Update Venue (Admin)
-
-- **Method:** `PUT`
-- **Path:** `/venues/{id}`
-- **Auth:** JWT required + `ADMIN`
-
-Request body:
-- Same shape as create request.
-
-Success response:
-- Returns updated venue object.
-
-### 11) Delete Venue (Admin)
-
-- **Method:** `DELETE`
-- **Path:** `/venues/{id}`
-- **Auth:** JWT required + `ADMIN`
-
-Success response:
-
-```json
-"Venue deleted successfully"
-```
-
-### 12) List Venues
-
-- **Method:** `GET`
-- **Path:** `/venues`
-- **Auth:** JWT required
-
-Success response:
-- Returns list of active venues.
-
-### 13) Get Venue by ID
-
-- **Method:** `GET`
-- **Path:** `/venues/{id}`
-- **Auth:** JWT required
-
-Success response:
-- Returns venue details (active venues).
-
-### 14) Search Venues (Optional)
-
-- **Method:** `GET`
-- **Path:** `/venues/search?location=...&capacity=...`
-- **Auth:** JWT required
-
-Query params:
-- `location` (optional): matches city/state/country
-- `capacity` (optional): minimum capacity
-
-Success response:
-- Returns list of active venues matching filters.
-
-### Venue Type Values
-
-- `HALL`
-- `OUTDOOR`
-- `CONFERENCE_ROOM`
-- `BANQUET`
-
-### 15) Create Event (Admin)
-
-- **Method:** `POST`
-- **Path:** `/events`
-- **Auth:** JWT required + `ADMIN`
-
-Request body:
-
-```json
-{
-  "name": "Tech Fest",
-  "description": "Annual event",
-  "eventDate": "2026-03-20",
-  "startTime": "10:00",
-  "endTime": "14:00",
-  "venueId": 1,
-  "ticketPrice": 1500.00,
-  "maxCapacity": 450
-}
-```
-
-Business rules:
-- `startTime` must be before `endTime`.
-- Venue must exist.
-- `ticketPrice` is taken from request body.
-- Event `venueCost` is auto-calculated as `venue.pricePerHour * durationHours`.
-- No overlapping active event at same venue and date.
-
-Overlap logic used:
+- Stateless authentication using JWT.
+- JWT filter (`OncePerRequestFilter`) validates token and populates security context.
+- Public routes: `/auth/register`, `/auth/login`, `/readiness`.
+
+### RBAC and Route Protection
+
+- Route-level and method-level authorization with `@PreAuthorize`.
+- Admin operations restricted to `hasRole('ADMIN')`.
+- Customer booking operations restricted to `hasRole('CUSTOMER')`.
+- All non-public endpoints require authentication.
+
+## 5. Validations and Business Rules
+
+EventZen enforces validation at DTO, service, and persistence levels.
+
+### Input Validation (DTO-level)
+
+- Required fields with `@NotNull` / `@NotBlank`.
+- Email format validation with `@Email`.
+- Numeric constraints such as `@Min` and `@DecimalMin`.
+- Size constraints for description/metadata fields.
+
+### Core Business Rules
+
+- Unique email for users:
+  - Enforced in business logic (`existsByEmail`) and DB unique column on `users.email`.
+- Event date/time consistency:
+  - `startTime` must be before `endTime`.
+- Venue availability conflict prevention:
+  - Overlapping active events at the same venue and timeslot are blocked.
+- Capacity constraints:
+  - Event max capacity cannot exceed venue capacity.
+  - Event max capacity cannot be reduced below already confirmed seats.
+- Booking limits:
+  - Seats per booking must be at least 1.
+  - Booking cannot exceed remaining capacity.
+  - Booking for ended events is rejected.
+- Vendor assignment rules:
+  - Duplicate vendor IDs in one attach request are rejected.
+  - Duplicate event-vendor mappings are blocked.
+  - Only active vendors can be attached to events.
+- Data integrity checks:
+  - Event status and ticket availability are synchronized when bookings/events change.
+  - Vendor-event relation has a DB uniqueness constraint on `(event_id, vendor_id)`.
+
+### Calculation and Derived-Field Rules
+
+The backend performs several deterministic calculations to keep pricing and planning consistent.
+
+#### 1) Venue Cost from Event Duration
+
+- Formula:
 
 ```text
-(newStart < existingEnd) && (newEnd > existingStart)
+durationMinutes = endTime - startTime
+durationHours = durationMinutes / 60
+venueCost = venue.pricePerHour * durationHours
 ```
 
-Success response:
-- Returns created event object.
+- Implementation details:
+  - `durationHours` is computed with decimal precision.
+  - `venueCost` is rounded/scaled to 2 decimal places.
 
-### 16) Update Event (Admin)
+#### 2) Booking Price Calculation
 
-- **Method:** `PUT`
-- **Path:** `/events/{id}`
-- **Auth:** JWT required + `ADMIN`
+- Formula:
 
-Request body:
-- Same shape as create event request.
-
-Behavior:
-- Re-checks overlap while excluding the same event ID.
-- Re-calculates `venueCost` from updated time window and venue hourly price.
-- Uses updated `ticketPrice` from request body.
-
-Success response:
-- Returns updated event object.
-
-### 17) Cancel Event (Admin Soft Delete)
-
-- **Method:** `DELETE`
-- **Path:** `/events/{id}`
-- **Auth:** JWT required + `ADMIN`
-
-Behavior:
-- Soft delete using `status = CANCELLED`.
-
-Success response:
-
-```json
-"Event cancelled successfully"
+```text
+pricePerTicket = event.ticketPrice
+totalPrice = pricePerTicket * numberOfSeats
 ```
 
-### 18) Get All Events
+- Both `pricePerTicket` and `totalPrice` are stored with 2-decimal precision.
 
-- **Method:** `GET`
-- **Path:** `/events`
-- **Auth:** JWT required (Admin/Customer)
+#### 3) Event Total Planning Cost
 
-Success response:
-- Returns active events.
+- Formula:
 
-### 19) Get Event by ID
+```text
+vendorCost = sum(cost of all vendors attached to event)
+totalCost = venueCost + vendorCost
+```
 
-- **Method:** `GET`
-- **Path:** `/events/{id}`
-- **Auth:** JWT required (Admin/Customer)
+- This planning total is synced to Budget Service as estimated cost.
 
-Success response:
-- Returns active event details.
+#### 4) Ticket Availability Tracking
 
-### 20) Get Events by Venue
+- On event create/update:
 
-- **Method:** `GET`
-- **Path:** `/events/venue/{venueId}`
-- **Auth:** JWT required (Admin/Customer)
+```text
+ticketAvailable = maxCapacity - confirmedBookedSeats
+```
 
-Success response:
-- Returns active events for a venue.
+- On booking confirmation/cancellation or admin status change:
 
-### 21) Search Events
+```text
+ticketAvailable = ticketAvailable - confirmedSeatDelta
+```
 
-- **Method:** `GET`
-- **Path:** `/events/search?date=...&location=...`
-- **Auth:** JWT required (Admin/Customer)
+- If `ticketAvailable == 0`, event status becomes `SOLD_OUT`; otherwise `ACTIVE` (unless cancelled/completed).
 
-Query params:
-- `date` (optional): event date (`YYYY-MM-DD`)
-- `location` (optional): matches venue city/state/country
+#### 5) Remaining Seats in Booking Summary
 
-Success response:
-- Returns active events matching filters.
+- Formula:
 
-### 22) Upcoming Events
+```text
+totalBookedSeats = sum(numberOfSeats where booking status = CONFIRMED)
+remainingSeats = max(maxCapacity - totalBookedSeats, 0)
+```
 
-- **Method:** `GET`
-- **Path:** `/events/upcoming`
-- **Auth:** JWT required (Admin/Customer)
+#### 6) Event Revenue Synchronization
 
-Logic:
-- `eventDate >= current date`
+- Formula:
 
-Success response:
-- Returns upcoming active events sorted by date/time.
+```text
+revenue = sum(totalPrice where booking status = CONFIRMED)
+```
 
-### Event Status Values
+- Revenue is pushed to Budget Service whenever booking state changes affect confirmed totals.
 
-- `ACTIVE`
-- `CANCELLED`
-- `COMPLETED`
+### Sequence Flow: Create Event -> Cost Calculation -> Budget Sync
 
-### 23) Create Booking (Customer)
+```mermaid
+sequenceDiagram
+  participant Admin
+  participant EventController
+  participant EventService
+  participant VenueRepository
+  participant EventRepository
+  participant BudgetClient
+  participant BudgetService
 
-- **Method:** `POST`
-- **Path:** `/bookings`
-- **Auth:** JWT required + `CUSTOMER`
+  Admin->>EventController: POST /events (EventRequest)
+  EventController->>EventService: createEvent(request)
+  EventService->>VenueRepository: find venue by venueId
+  VenueRepository-->>EventService: Venue
+  EventService->>EventService: validate timing, overlap, capacity
+  EventService->>EventService: calculate venueCost from duration
+  EventService->>EventRepository: save event
+  EventRepository-->>EventService: saved Event
+  EventService->>EventService: compute totalCost = venueCost + vendorCost
+  EventService->>BudgetClient: upsertEstimatedCostForEvent(eventId, totalCost)
+  BudgetClient->>BudgetService: POST /api/budget/estimate
+  BudgetService-->>BudgetClient: 200 OK
+  BudgetClient-->>EventService: success
+  EventService-->>EventController: EventResponse
+  EventController-->>Admin: 200 OK
+```
 
-Request body:
+### Assumptions and Constraints
+
+- Event timing assumes same-day start and end times (`startTime < endTime` on one `eventDate`).
+- Pricing assumes non-negative monetary values and 2-decimal financial precision.
+- `venue.pricePerHour` must exist to compute `venueCost`; missing value rejects event create/update.
+- Capacity constraints are strict: confirmed bookings are never allowed to exceed `maxCapacity`.
+- Event overlap checks are enforced for active scheduling at the same venue/time window.
+- Budget sync is treated as part of operational consistency; downstream failure returns integration error (`503`).
+- Visibility is role- and status-aware (for example customers only see active vendors and visible events).
+
+### Glossary of Domain Terms
+
+- `venueCost`: Venue rental cost computed from venue hourly rate and event duration.
+- `vendorCost`: Sum of all vendor assignment costs linked to an event.
+- `totalCost`: Aggregate planning cost for an event (`venueCost + vendorCost`).
+- `revenue`: Sum of confirmed booking `totalPrice` values for an event.
+- `ticketAvailable`: Remaining sellable seats for an event after confirmed booking adjustments.
+
+### Error Handling Approach
+
+- Centralized `@RestControllerAdvice` handles validation, domain, security, integration, and generic exceptions.
+- Proper HTTP status mapping (400, 401, 404, 409, 503, 500).
+
+## 6. API Documentation
+
+Base URL (local): `http://localhost:8080`
+
+Authentication header for protected routes:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### A. Admin APIs
+
+#### User Administration
+
+| Method | URL | Description |
+|---|---|---|
+| GET | `/admin/users` | List all users |
+| GET | `/users/{id}` | Get user by ID |
+| DELETE | `/users/{id}` | Delete user by ID |
+
+#### Event Administration
+
+| Method | URL | Description |
+|---|---|---|
+| POST | `/events` | Create event |
+| PUT | `/events/{id}` | Update event |
+| DELETE | `/events/{id}` | Cancel event |
+
+#### Venue Administration
+
+| Method | URL | Description |
+|---|---|---|
+| POST | `/venues` | Create venue |
+| PUT | `/venues/{id}` | Update venue |
+| DELETE | `/venues/{id}` | Delete venue |
+
+#### Vendor Administration
+
+| Method | URL | Description |
+|---|---|---|
+| POST | `/vendors` | Create vendor |
+| PUT | `/vendors/{id}` | Update vendor |
+| DELETE | `/vendors/{id}` | Soft-delete vendor |
+| POST | `/events/{eventId}/vendors` | Attach vendors to event |
+| DELETE | `/events/{eventId}/vendors/{vendorId}` | Remove vendor from event |
+
+#### Booking Administration
+
+| Method | URL | Description |
+|---|---|---|
+| GET | `/bookings` | List all bookings |
+| GET | `/bookings/event/{eventId}` | List bookings by event |
+| PUT | `/bookings/{id}/status` | Update booking status |
+| GET | `/bookings/event/{eventId}/summary` | Event booking summary |
+
+#### Budget Administration
+
+| Method | URL | Description |
+|---|---|---|
+| GET | `/admin/budget/event/{eventId}` | Fetch budget by event |
+| POST | `/admin/budget/set` | Set total budget for event |
+| GET | `/admin/budget/expense/event/{eventId}` | List expenses by event |
+| POST | `/admin/budget/expense` | Add expense |
+| DELETE | `/admin/budget/expense/{id}` | Delete expense |
+
+### B. User APIs
+
+| Method | URL | Description |
+|---|---|---|
+| POST | `/auth/register` | Register user |
+| POST | `/auth/login` | Login and receive JWT |
+| GET | `/auth/me` | Get current profile |
+| PUT | `/auth/change-password` | Change current password |
+| PUT | `/users/me` | Update own profile |
+| GET | `/events` | List visible events |
+| GET | `/events/{id}` | Get event by ID |
+| GET | `/events/search?date=YYYY-MM-DD&location=...` | Search events |
+| GET | `/events/upcoming` | List upcoming events |
+| GET | `/events/venue/{venueId}` | Events by venue |
+| GET | `/venues` | List active venues |
+| GET | `/venues/{id}` | Get venue by ID |
+| GET | `/venues/search?location=...&capacity=...` | Search venues |
+| GET | `/vendors` | List vendors (active-only for customers) |
+| GET | `/vendors/{id}` | Get vendor by ID (active-only for customers) |
+| GET | `/events/{eventId}/vendors` | List vendors assigned to event |
+| POST | `/bookings` | Book tickets (customer role) |
+| GET | `/bookings/my` | View own bookings |
+| DELETE | `/bookings/{id}` | Cancel own booking |
+
+### C. Integration APIs
+
+#### Exposed integration proxy (EventZen -> Budget Service)
+
+- `/admin/budget/*` endpoints listed above are EventZen-managed integration endpoints.
+
+#### Internal outbound calls from EventZen to Budget Service
+
+These are invoked through `BudgetClient`:
+
+| Method | Downstream URL (Budget Service) | Purpose |
+|---|---|---|
+| POST | `/api/budget/estimate` | Upsert estimated event cost |
+| POST | `/api/budget/set` | Set total budget |
+| POST | `/api/budget/revenue/{eventId}` | Sync event revenue |
+| GET | `/api/budget/{eventId}` | Fetch budget snapshot |
+| GET | `/api/expense/event/{eventId}` | Fetch expenses |
+| POST | `/api/expense` | Add expense |
+| DELETE | `/api/expense/{id}` | Delete expense |
+
+### Calculation-Critical APIs (Quick Reference)
+
+These endpoints directly trigger or depend on pricing/capacity calculations:
+
+| Method | URL | Calculation Impact |
+|---|---|---|
+| POST | `/events` | Computes `venueCost`, initializes ticket availability, syncs estimated cost |
+| PUT | `/events/{id}` | Recomputes `venueCost`, revalidates capacity, syncs estimated cost |
+| POST | `/events/{eventId}/vendors` | Recomputes vendor and total planning cost, syncs estimate |
+| DELETE | `/events/{eventId}/vendors/{vendorId}` | Recomputes planning cost, syncs estimate |
+| POST | `/bookings` | Computes booking `totalPrice`, updates inventory, syncs revenue |
+| DELETE | `/bookings/{id}` | Restores inventory for confirmed bookings, syncs revenue |
+| PUT | `/bookings/{id}/status` | Applies status transition inventory/revenue effects |
+| GET | `/bookings/event/{eventId}/summary` | Returns computed seat totals and remaining capacity |
+
+## 7. Database Design
+
+### Main Entities
+
+- `User`
+- `Event`
+- `Venue`
+- `Vendor`
+- `Booking`
+- `EventVendor` (join entity for event-vendor assignments)
+
+### Key Relationships
+
+- One `Venue` can be used by many `Event` records (`Event` -> `Venue`: many-to-one).
+- One `User` can create many `Booking` records (`Booking` -> `User`: many-to-one).
+- One `Event` can have many `Booking` records (`Booking` -> `Event`: many-to-one).
+- `Event` and `Vendor` are many-to-many via `EventVendor`.
+- `EventVendor` enforces uniqueness on `(event_id, vendor_id)` to prevent duplicate assignments.
+
+## 8. Error Handling
+
+### Global Exception Handling
+
+Implemented using `@RestControllerAdvice` with dedicated handlers for:
+
+- Validation errors (`MethodArgumentNotValidException`) -> `400 Bad Request`
+- Resource not found -> `404 Not Found`
+- Duplicate resource -> `409 Conflict`
+- Bad credentials -> `401 Unauthorized`
+- Budget integration failures -> `503 Service Unavailable`
+- Unexpected exceptions -> `500 Internal Server Error`
+
+### Standard Response Patterns
+
+EventZen returns JSON error payloads with consistent key usage:
 
 ```json
 {
-  "eventId": 1,
-  "numberOfSeats": 3
+  "error": "Descriptive message"
 }
 ```
 
-Business rules:
-- User is taken from JWT.
-- Event must exist and be `ACTIVE`.
-- Event must not be ended (`now <= event end time`).
-- Capacity check uses confirmed seats only.
-- `pricePerTicket` is snapped from `event.ticketPrice`.
-- `totalPrice = pricePerTicket * numberOfSeats`.
-
-Success response:
-- Returns created booking with pricing snapshot fields (`pricePerTicket`, `totalPrice`).
-
-### 24) Get My Bookings (Customer)
-
-- **Method:** `GET`
-- **Path:** `/bookings/my`
-- **Auth:** JWT required + `CUSTOMER`
-
-Success response:
-- Returns all bookings for logged-in customer.
-
-### 25) Cancel My Booking (Customer Soft Delete)
-
-- **Method:** `DELETE`
-- **Path:** `/bookings/{id}`
-- **Auth:** JWT required + `CUSTOMER`
-
-Behavior:
-- Cancels only the logged-in user's booking.
-- Soft delete by setting `status = CANCELLED`.
-
-Success response:
-
-```json
-"Booking cancelled successfully"
-```
-
-### 26) Get All Bookings (Admin)
-
-- **Method:** `GET`
-- **Path:** `/bookings`
-- **Auth:** JWT required + `ADMIN`
-
-Success response:
-- Returns all bookings across users/events.
-
-### 27) Get Bookings By Event (Admin)
-
-- **Method:** `GET`
-- **Path:** `/bookings/event/{eventId}`
-- **Auth:** JWT required + `ADMIN`
-
-Success response:
-- Returns bookings for the specified event.
-
-### 28) Update Booking Status (Admin)
-
-- **Method:** `PUT`
-- **Path:** `/bookings/{id}/status`
-- **Auth:** JWT required + `ADMIN`
-
-Request body:
+Validation errors return field-to-message maps:
 
 ```json
 {
-  "status": "CANCELLED"
+  "email": "Email must be valid",
+  "password": "size must be between 6 and 2147483647"
 }
 ```
 
-Supported status values:
-- `CONFIRMED`
-- `CANCELLED`
+## 9. Setup and Installation
 
-Success response:
-- Returns the updated booking.
+### Prerequisites
 
-### 29) Event Booking Summary (Admin)
+- Java 17+
+- Maven 3.9+
+- MySQL 8+
+- Docker and Docker Compose (optional, recommended for full stack)
 
-- **Method:** `GET`
-- **Path:** `/bookings/event/{eventId}/summary`
-- **Auth:** JWT required + `ADMIN`
+### Local Run (Backend only)
 
-Success response:
+1. Clone repository and move to backend folder.
+2. Create `.env` in backend folder (copy from `.env.example`).
+3. Ensure MySQL database exists and credentials match environment variables.
+4. Build and run:
 
-```json
-{
-  "eventId": 1,
-  "maxCapacity": 200,
-  "totalBookedSeats": 120,
-  "remainingSeats": 80
-}
+```bash
+mvn clean install
+mvn spring-boot:run
 ```
 
-### Booking Response Sample
+Application default port: `8080`
 
-```json
-{
-  "id": 10,
-  "userId": 2,
-  "userName": "Alice",
-  "eventId": 1,
-  "eventName": "Tech Fest",
-  "eventDate": "2026-03-20",
-  "startTime": "10:00:00",
-  "endTime": "14:00:00",
-  "numberOfSeats": 3,
-  "pricePerTicket": 1500.00,
-  "totalPrice": 4500.00,
-  "bookingTime": "2026-03-19T21:30:00",
-  "status": "CONFIRMED",
-  "createdAt": "2026-03-19T21:30:00",
-  "updatedAt": "2026-03-19T21:30:00"
-}
+### Environment Variables
+
+At minimum configure:
+
+```env
+SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/eventzen?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+SPRING_DATASOURCE_USERNAME=eventzen
+SPRING_DATASOURCE_PASSWORD=YourStrongDBPassword
+
+JWT_SECRET=YourLongRandomJWTSecret
+JWT_EXPIRATION=86400000
+
+APP_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Budget service integration
+BUDGET_SERVICE_BASE_URL=http://localhost:4001
+INTERNAL_SERVICE_KEY=eventzen-internal-service-key-change-me
+
+# Optional datasource startup timeout (ms)
+SPRING_TIMEOUT=1
 ```
 
-## Common Error Responses
+### Docker Run (Full stack)
 
-- **400 Bad Request**: validation errors
-- **401 Unauthorized**: invalid credentials or invalid token
-- **403 Forbidden**: authenticated but not allowed (for admin endpoints)
-- **404 Not Found**: user/resource not found
-- **409 Conflict**: duplicate resource (for example email already used)
-- **500 Internal Server Error**: unexpected server error
+From repository root:
 
-For events, `409 Conflict` is returned when overlap is detected at the same venue/time.
+```bash
+docker compose up --build
+```
+
+Services include:
+
+- EventZen backend (`8080`)
+- Frontend (`3000`)
+- MySQL (`3306`)
+- Budget Service and its PostgreSQL database
+
+## 10. Future Enhancements
+
+- Event analytics dashboard (booking trends, occupancy, revenue insights).
+- Asynchronous integration/event updates via message broker (Kafka/RabbitMQ).
+- Caching and performance tuning for high-traffic reads.
+- API versioning and OpenAPI/Swagger generation.
+- Rate limiting and audit logging for security hardening.
+- Horizontal scaling with service discovery and centralized config.
+- Multi-tenant support for organizer-level isolation.
+
+## 11. Tech Stack
+
+- Spring Boot 3.2
+- Spring Security (JWT + RBAC)
+- Spring Data JPA / Hibernate
+- MySQL
+- REST APIs
+- Docker / Docker Compose
+- Maven
+
+---
+
+## Quick Start Checklist
+
+1. Configure `.env` with DB/JWT/Budget values.
+2. Start MySQL (or run full stack with Docker Compose).
+3. Run backend using Maven.
+4. Register/login via `/auth/*` endpoints.
+5. Use JWT token for protected APIs.

@@ -3,6 +3,7 @@ import { User, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile } from '../../api/users';
 import { changePassword } from '../../api/auth';
+import { isValidPassword, passwordRuleText } from '../../utils/validation';
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -29,8 +30,8 @@ export default function ProfilePage() {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setPwMsg(null);
-    if (pwForm.newPassword.length < 6) {
-      setPwMsg({ type: 'error', text: 'New password must be at least 6 characters.' });
+    if (!isValidPassword(pwForm.newPassword)) {
+      setPwMsg({ type: 'error', text: passwordRuleText });
       return;
     }
     setLoading(true);

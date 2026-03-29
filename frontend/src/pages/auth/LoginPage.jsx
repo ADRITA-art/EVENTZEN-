@@ -4,6 +4,7 @@ import { Zap, Mail, Lock, AlertCircle } from 'lucide-react';
 import { login as loginApi } from '../../api/auth';
 import { getMe } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import { isValidEmail, isValidPassword, passwordRuleText } from '../../utils/validation';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -15,9 +16,20 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    const normalizedEmail = form.email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!isValidPassword(form.password)) {
+      setError(passwordRuleText);
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await loginApi(form.email, form.password);
+      const res = await loginApi(normalizedEmail, form.password);
       const { token, role } = res.data;
       // Fetch profile immediately
       localStorage.setItem('token', token);
@@ -78,6 +90,7 @@ export default function LoginPage() {
                 required
                 placeholder="you@example.com"
                 value={form.email}
+                autoComplete="email"
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
@@ -97,6 +110,7 @@ export default function LoginPage() {
                 required
                 placeholder="••••••••"
                 value={form.password}
+                autoComplete="current-password"
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}

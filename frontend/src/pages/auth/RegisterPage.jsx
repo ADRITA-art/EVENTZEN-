@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Zap, User, Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { register } from '../../api/auth';
+import { isValidEmail, isValidPassword, passwordRuleText } from '../../utils/validation';
 
 const ROLES = ['CUSTOMER', 'ADMIN'];
 
@@ -16,13 +17,20 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters.');
+
+    const normalizedEmail = form.email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
+    if (!isValidPassword(form.password)) {
+      setError(passwordRuleText);
+      return;
+    }
+
     setLoading(true);
     try {
-      await register(form.name, form.email, form.password, form.role);
+      await register(form.name.trim(), normalizedEmail, form.password, form.role);
       setSuccess('Account created! Redirecting to login…');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
@@ -81,6 +89,7 @@ export default function RegisterPage() {
                   required
                   placeholder={placeholder}
                   value={form[key]}
+                  autoComplete={key === 'email' ? 'email' : key === 'password' ? 'new-password' : 'name'}
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                   className="input-field"
                   style={{ paddingLeft: '2.25rem' }}

@@ -1,45 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FloatingHeader } from '../components/FloatingHeader';
-
-const accordionItems = [
-  {
-    id: 1,
-    title: 'Event Management',
-    description: 'Organize events with real-time scheduling and availability checks.',
-    imageUrl: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=2070&auto=format&fit=crop',
-  },
-  {
-    id: 2,
-    title: 'Venue Management',
-    description: 'Browse, add, and manage venues with pricing and capacity constraints.',
-    imageUrl: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=2098&auto=format&fit=crop',
-  },
-  {
-    id: 3,
-    title: 'Vendor Coordination',
-    description: 'Assign and manage vendors for catering, decoration, and more.',
-    imageUrl: 'https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=2070&auto=format&fit=crop',
-  },
-  {
-    id: 4,
-    title: 'Budget Tracking',
-    description: 'Monitor estimated vs actual costs and control your event spending.',
-    imageUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=2036&auto=format&fit=crop',
-  },
-  {
-    id: 5,
-    title: 'Smart Bookings',
-    description: 'Handle ticket bookings, availability, and customer management.',
-    imageUrl: 'https://images.unsplash.com/photo-1540331547168-8b63109225b7?q=80&w=2019&auto=format&fit=crop',
-  },
-  {
-    id: 6,
-    title: 'Analytics & Insights',
-    description: 'Get insights on revenue, expenses, and event performance.',
-    imageUrl: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop',
-  },
-];
 
 const AccordionItem = ({ item, isActive, onMouseEnter }) => {
   return (
@@ -129,7 +90,34 @@ const AccordionItem = ({ item, isActive, onMouseEnter }) => {
 
 export default function LandingPage() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [accordionItems, setAccordionItems] = useState([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadFeatures = async () => {
+      try {
+        const response = await fetch('/landing-features.json');
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        if (!ignore && Array.isArray(payload)) {
+          setAccordionItems(payload);
+        }
+      } catch (_error) {
+        // Keep the page usable even if the data file cannot be read.
+      }
+    };
+
+    loadFeatures();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   return (
     <div style={{

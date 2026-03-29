@@ -3,6 +3,8 @@ import { Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { getAllVendors, createVendor, updateVendor, deleteVendor } from '../../api/vendors';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import { isValidEmail, isValidPhone } from '../../utils/validation';
+import { isNonNegativeNumber, isRequiredText, toTrimmed } from '../../utils/validation';
 
 const emptyForm = {
   name: '',
@@ -49,9 +51,46 @@ export default function VendorsPage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    const normalizedName = toTrimmed(form.name);
+    const normalizedServiceType = toTrimmed(form.serviceType);
+    const normalizedContactPerson = toTrimmed(form.contactPerson);
+    const normalizedPhone = toTrimmed(form.phone);
+    const normalizedEmail = toTrimmed(form.email).toLowerCase();
+
+    if (!isRequiredText(normalizedName)) {
+      setMsg({ type: 'error', text: 'Vendor name is required.' });
+      return;
+    }
+    if (!isRequiredText(normalizedServiceType)) {
+      setMsg({ type: 'error', text: 'Service type is required.' });
+      return;
+    }
+    if (!isRequiredText(normalizedContactPerson)) {
+      setMsg({ type: 'error', text: 'Contact person is required.' });
+      return;
+    }
+    if (!isValidPhone(normalizedPhone)) {
+      setMsg({ type: 'error', text: 'Please enter a valid phone number (10-20 digits, optional +, spaces, (), -).' });
+      return;
+    }
+    if (!isValidEmail(normalizedEmail)) {
+      setMsg({ type: 'error', text: 'Please enter a valid vendor email address.' });
+      return;
+    }
+    if (!isNonNegativeNumber(form.price)) {
+      setMsg({ type: 'error', text: 'Base price must be 0 or greater.' });
+      return;
+    }
+
     setSaving(true);
     const payload = {
       ...form,
+      name: normalizedName,
+      serviceType: normalizedServiceType,
+      contactPerson: normalizedContactPerson,
+      phone: normalizedPhone,
+      email: normalizedEmail,
       price: Number(form.price),
     };
     try {
@@ -152,22 +191,11 @@ export default function VendorsPage() {
         <Modal title={modal.mode === 'create' ? 'Add Vendor' : 'Edit Vendor'} onClose={() => setModal(null)} maxWidth="560px">
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             <F label="Vendor Name *" id="v-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Awesome Catering" />
-            <div>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#434655', display: 'block', marginBottom: '0.3rem' }}>Service Type *</label>
-              <select id="v-type" required value={form.serviceType} onChange={(e) => setForm({ ...form, serviceType: e.target.value })} className="input-field">
-                <option value="">— Select Service Type —</option>
-                <option value="Catering">Catering</option>
-                <option value="Decoration">Decoration</option>
-                <option value="Audio/Visual">Audio/Visual</option>
-                <option value="Photography">Photography</option>
-                <option value="Security">Security</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+            <F label="Service Type *" id="v-type" required value={form.serviceType} onChange={(e) => setForm({ ...form, serviceType: e.target.value })} placeholder="Catering" />
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
               <F label="Contact Person *" id="v-contact" required value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} />
-              <F label="Phone *" id="v-phone" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <F label="Phone *" id="v-phone" type="tel" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>

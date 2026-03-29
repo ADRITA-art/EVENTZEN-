@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { createBooking } from '../../api/bookings';
+import { isPositiveInteger } from '../../utils/validation';
 
 export default function BookNowModal({ event, onClose, onSuccess }) {
   const [seats, setSeats] = useState(1);
@@ -14,7 +15,7 @@ export default function BookNowModal({ event, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (seats < 1 || seats > maxSeats) {
+    if (!isPositiveInteger(seats) || seats > maxSeats) {
       setError(`Please enter between 1 and ${maxSeats} seats.`);
       return;
     }
@@ -65,7 +66,14 @@ export default function BookNowModal({ event, onClose, onSuccess }) {
             min={1}
             max={maxSeats}
             value={seats}
-            onChange={(e) => setSeats(Math.max(1, Math.min(maxSeats, parseInt(e.target.value) || 1)))}
+            onChange={(e) => {
+              const parsed = Number.parseInt(e.target.value, 10);
+              if (Number.isNaN(parsed)) {
+                setSeats(1);
+                return;
+              }
+              setSeats(Math.max(1, Math.min(maxSeats, parsed)));
+            }}
             className="input-field"
           />
           <p style={{ fontSize: '0.75rem', color: '#737686', marginTop: '0.25rem' }}>Max {maxSeats} seats</p>

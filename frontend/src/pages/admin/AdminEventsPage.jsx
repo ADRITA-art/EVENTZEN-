@@ -7,6 +7,15 @@ import { getBudgetByEvent, setBudgetForEvent, getExpensesByEvent, addExpense, de
 import Modal from '../../components/ui/Modal';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Spinner from '../../components/ui/Spinner';
+import {
+  isNonNegativeNumber,
+  isPositiveInteger,
+  isPositiveNumber,
+  isRequiredText,
+  isStartBeforeEndTime,
+  isValidIsoDate,
+  toTrimmed,
+} from '../../utils/validation';
 
 const emptyForm = {
   name: '', description: '', eventDate: '', startTime: '', endTime: '',
@@ -89,9 +98,43 @@ export default function AdminEventsPage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    const normalizedName = toTrimmed(form.name);
+    const normalizedDescription = toTrimmed(form.description);
+    if (!isRequiredText(normalizedName)) {
+      setMsg({ type: 'error', text: 'Event name is required.' });
+      return;
+    }
+    if (!isValidIsoDate(form.eventDate)) {
+      setMsg({ type: 'error', text: 'Please select a valid event date.' });
+      return;
+    }
+    if (!isStartBeforeEndTime(form.startTime, form.endTime)) {
+      setMsg({ type: 'error', text: 'Start time must be earlier than end time.' });
+      return;
+    }
+    if (!isPositiveInteger(form.venueId)) {
+      setMsg({ type: 'error', text: 'Please select a valid venue.' });
+      return;
+    }
+    if (!isPositiveInteger(form.maxCapacity)) {
+      setMsg({ type: 'error', text: 'Max capacity must be a positive whole number.' });
+      return;
+    }
+    if (maxForCapacity && Number(form.maxCapacity) > Number(maxForCapacity)) {
+      setMsg({ type: 'error', text: `Max capacity cannot exceed selected venue capacity (${maxForCapacity}).` });
+      return;
+    }
+    if (!isNonNegativeNumber(form.ticketPrice)) {
+      setMsg({ type: 'error', text: 'Ticket price must be 0 or greater.' });
+      return;
+    }
+
     setSaving(true);
     const payload = {
       ...form,
+      name: normalizedName,
+      description: normalizedDescription,
       venueId: Number(form.venueId),
       ticketPrice: Number(form.ticketPrice),
       maxCapacity: Number(form.maxCapacity),
@@ -133,12 +176,26 @@ export default function AdminEventsPage() {
 
   const handleAddVendor = async (e) => {
      e.preventDefault();
+
+     if (!isPositiveInteger(vendorForm.vendorId)) {
+       setMsg({ type: 'error', text: 'Please select a vendor before attaching.' });
+       return;
+     }
+     if (!isRequiredText(vendorForm.purpose)) {
+       setMsg({ type: 'error', text: 'Vendor purpose is required.' });
+       return;
+     }
+     if (!isNonNegativeNumber(vendorForm.cost)) {
+       setMsg({ type: 'error', text: 'Vendor cost must be 0 or greater.' });
+       return;
+     }
+
      setSaving(true);
      try {
        const payload = {
           vendors: [{
              vendorId: Number(vendorForm.vendorId),
-             purpose: vendorForm.purpose,
+             purpose: toTrimmed(vendorForm.purpose),
              cost: Number(vendorForm.cost)
           }]
        };
@@ -181,8 +238,8 @@ export default function AdminEventsPage() {
 
   const handleSetBudget = async (e) => {
      e.preventDefault();
-     if (!budgetForm.totalBudget) {
-       setMsg({ type: 'error', text: 'Enter total budget before saving.' });
+     if (!isNonNegativeNumber(budgetForm.totalBudget)) {
+       setMsg({ type: 'error', text: 'Total budget must be 0 or greater.' });
        return;
      }
 
@@ -206,11 +263,21 @@ export default function AdminEventsPage() {
 
   const handleAddExpense = async (e) => {
      e.preventDefault();
+
+     if (!isRequiredText(expenseForm.description)) {
+       setMsg({ type: 'error', text: 'Expense description is required.' });
+       return;
+     }
+     if (!isPositiveNumber(expenseForm.amount)) {
+       setMsg({ type: 'error', text: 'Expense amount must be greater than 0.' });
+       return;
+     }
+
      setSaving(true);
      try {
         await addExpense({
            eventId: budgetModal.event.id,
-           description: expenseForm.description,
+           description: toTrimmed(expenseForm.description),
            amount: Number(expenseForm.amount)
         });
         const [bReq, eReq] = await Promise.allSettled([
