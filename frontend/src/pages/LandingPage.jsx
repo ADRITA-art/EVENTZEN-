@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FloatingHeader } from '../components/FloatingHeader';
 
 const accordionItems = [
   {
@@ -139,6 +140,7 @@ export default function LandingPage() {
       flexDirection: 'column',
       boxSizing: 'border-box',
     }}>
+      <FloatingHeader />
 
       {/* ── HERO SECTION ── */}
       <main style={{

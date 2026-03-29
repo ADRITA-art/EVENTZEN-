@@ -45,15 +45,7 @@ export default function LoginPage() {
       <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem' }}>
         {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-          <div
-            style={{
-              width: 36, height: 36, borderRadius: '10px',
-              background: 'linear-gradient(135deg,#1E3A8A,#3650a0)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Zap size={20} color="white" />
-          </div>
+          <img src="/logo.png" alt="EventZen Logo" style={{ width: 36, height: 36, borderRadius: '10px' }} />
           <span style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: '1.4rem', color: '#1E3A8A' }}>
             EventZen
           </span>
