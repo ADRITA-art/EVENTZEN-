@@ -16,24 +16,30 @@ const emptyVendorForm = { vendorId: '', purpose: '', cost: '' };
 const emptyExpenseForm = { description: '', amount: '' };
 const emptyBudgetForm = { totalBudget: '' };
 
-const Tooltip = ({ text, children }) => (
-  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }} className="group">
-    {children}
-    <div 
-      className="group-hover:opacity-100 group-hover:visible"
-      style={{
-         position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-         marginBottom: '6px', padding: '6px 10px', background: '#191c1e', color: '#fff',
-         fontSize: '0.75rem', borderRadius: '6px', width: 'max-content', maxWidth: '240px',
-         textAlign: 'center', opacity: 0, visibility: 'hidden', transition: 'all 0.2s ease', zIndex: 100,
-         lineHeight: '1.4', fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-         pointerEvents: 'none'
-      }}>
-      {text}
-      <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', border: '5px solid transparent', borderTopColor: '#191c1e' }} />
+const Tooltip = ({ text, children, align = 'center' }) => {
+  const alignStyle = align === 'right' ? { right: '-5px', transform: 'none' } :
+                     { left: '50%', transform: 'translateX(-50%)' };
+  const arrowStyle = align === 'right' ? { right: '10px' } :
+                     { left: '50%', transform: 'translateX(-50%)' };
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }} className="group">
+      {children}
+      <div 
+        className="opacity-0 invisible group-hover:opacity-100 group-hover:visible"
+        style={{
+           position: 'absolute', bottom: '100%', ...alignStyle,
+           marginBottom: '6px', padding: '6px 10px', background: '#191c1e', color: '#fff',
+           fontSize: '0.75rem', borderRadius: '6px', width: 'max-content', maxWidth: '240px',
+           textAlign: align === 'right' ? 'right' : 'center', transition: 'all 0.2s ease', zIndex: 100,
+           lineHeight: '1.4', fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+           pointerEvents: 'none'
+        }}>
+        {text}
+        <div style={{ position: 'absolute', top: '100%', border: '5px solid transparent', borderTopColor: '#191c1e', ...arrowStyle }} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState([]);
@@ -428,7 +434,7 @@ export default function AdminEventsPage() {
              <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginBottom: '4px' }}>
                    📉 Remaining
-                   <Tooltip text="The remaining amount available to spend. Calculated as total budget minus actual cost."><Info size={14} color="#16a34a" /></Tooltip>
+                   <Tooltip align="right" text="The remaining amount available to spend. Calculated as total budget minus actual cost."><Info size={14} color="#16a34a" /></Tooltip>
                 </div>
                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#14532d' }}>₹{budgetModal.budget?.remainingBudget ? Number(budgetModal.budget.remainingBudget).toLocaleString() : '0.00'}</div>
              </div>
@@ -445,7 +451,7 @@ export default function AdminEventsPage() {
              <div style={{ flex: 1, padding: '1rem', background: '#ecfeff', borderRadius: '8px', border: '1px solid #a5f3fc' }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#0e7490', textTransform: 'uppercase', marginBottom: '4px' }}>
                    📈 Profit
-                   <Tooltip text="The net gain or loss. Calculated as revenue minus actual cost."><Info size={14} color="#0891b2" /></Tooltip>
+                   <Tooltip align="right" text="The net gain or loss. Calculated as revenue minus actual cost."><Info size={14} color="#0891b2" /></Tooltip>
                </div>
                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#164e63' }}>
                  <span style={{ color: Number(budgetModal.budget?.profit) < 0 ? '#991b1b' : '#164e63' }}>

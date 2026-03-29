@@ -13,9 +13,10 @@ export default function LandingPage() {
       fontFamily: 'Manrope, sans-serif'
     }}>
       <div style={{ textAlign: 'center', maxWidth: '600px', padding: '2rem', background: '#fff', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-        <h1 style={{ fontSize: '3rem', fontWeight: 800, color: '#1E3A8A', marginBottom: '1rem' }}>EventZen</h1>
-        <p style={{ fontSize: '1.25rem', color: '#434655', marginBottom: '2rem' }}>
-          Your ultimate platform to discover, book, and manage amazing events flawlessly.
+        <img src="/logo.png" alt="EventZen Logo" style={{ width: '80px', height: '80px', marginBottom: '1rem' }} />
+        <h1 style={{ fontSize: '3rem', fontWeight: 800, color: '#1E3A8A', marginBottom: '0.5rem' }}>EventZen</h1>
+        <p style={{ fontSize: '1.25rem', color: '#434655', marginBottom: '2rem', fontWeight: 600 }}>
+          Event Management Made Zen
         </p>
         <button 
           onClick={() => navigate('/login')}

@@ -31,19 +31,16 @@ export default function CustomerLayout() {
         }}
       >
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div
-            style={{
-              width: 32, height: 32, borderRadius: '8px',
-              background: 'linear-gradient(135deg,#1E3A8A,#3650a0)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Zap size={18} color="white" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <img src="/logo.png" alt="EventZen Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: '1.25rem', color: '#1E3A8A', lineHeight: '1.2' }}>
+              EventZen
+            </span>
+            <span style={{ fontSize: '0.65rem', color: '#434655', fontWeight: 600, letterSpacing: '0.02em' }}>
+              Event Management Made Zen
+            </span>
           </div>
-          <span style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: '1.25rem', color: '#1E3A8A' }}>
-            EventZen
-          </span>
         </div>
 
         {/* Nav links */}
