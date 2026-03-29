@@ -43,63 +43,85 @@ const accordionItems = [
 const AccordionItem = ({ item, isActive, onMouseEnter }) => {
   return (
     <div
-      className={`
-        relative h-[500px] rounded-3xl overflow-hidden cursor-pointer
-        transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]
-        ${isActive ? 'w-[320px] md:w-[420px]' : 'w-[50px] md:w-[70px]'}
-      `}
       onMouseEnter={onMouseEnter}
-      style={{ boxShadow: isActive ? '0 15px 40px rgba(30, 58, 138, 0.25)' : 'none' }}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        flexShrink: 0,
+        cursor: 'pointer',
+        height: '480px',
+        width: isActive ? '400px' : '58px',
+        borderRadius: '28px',
+        background: '#000',
+        transition: 'width 0.7s cubic-bezier(0.25,1,0.5,1)',
+        boxShadow: isActive ? '0 20px 50px rgba(0,0,0,0.2)' : 'none',
+      }}
     >
       <img
         src={item.imageUrl}
         alt={item.title}
-        className="absolute inset-0 w-full h-full object-cover"
+        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x480/1e293b/ffffff?text=EventZen'; }}
         style={{
-          filter: isActive ? 'brightness(1.05)' : 'brightness(0.65) grayscale(40%)',
-          transition: 'filter 0.5s ease-in-out',
-          objectPosition: 'center',
+          position: 'absolute', inset: 0,
+          width: '100%', height: '100%', objectFit: 'cover',
+          filter: isActive ? 'brightness(0.9)' : 'grayscale(100%) brightness(0.3)',
+          opacity: isActive ? 1 : 0.4,
+          transition: 'filter 0.6s ease, opacity 0.6s ease',
         }}
-        onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x480/2d3748/ffffff?text=EventZen'; }}
       />
-      
-      {/* Dark overlay for text readability */}
-      <div 
-        className="absolute inset-0 transition-opacity duration-700 ease-in-out"
-        style={{
-          background: isActive ? 'linear-gradient(to top, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.4) 50%, transparent 100%)' : 'rgba(0,0,0,0.55)'
-        }}
-      ></div>
 
-      <div
-        className={`
-          absolute w-full bottom-0 left-0 p-8 flex flex-col items-center justify-end
-          transition-all duration-500 delay-100 ease-in-out
-          ${isActive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}
-        `}
-      >
-        <span className="text-white text-2xl md:text-3xl font-extrabold mb-3 text-center" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>
+      {/* bottom gradient when active */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)',
+        opacity: isActive ? 1 : 0,
+        transition: 'opacity 0.6s ease',
+      }} />
+
+      {/* extra dark coat when inactive */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        opacity: isActive ? 0 : 1,
+        transition: 'opacity 0.6s ease',
+      }} />
+
+      {/* Active label + description */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: '28px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+        opacity: isActive ? 1 : 0,
+        transform: isActive ? 'translateY(0)' : 'translateY(16px)',
+        transition: 'opacity 0.4s ease 0.15s, transform 0.4s ease 0.15s',
+        pointerEvents: isActive ? 'auto' : 'none',
+      }}>
+        <span style={{ color: '#fff', fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px', fontFamily: 'inherit' }}>
           {item.title}
         </span>
-        <span className="text-blue-50 text-sm md:text-base text-center font-medium leading-relaxed max-w-[95%]">
+        <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.85rem', lineHeight: 1.6, fontFamily: 'inherit' }}>
           {item.description}
         </span>
       </div>
 
-      <span
-        className={`
-          absolute text-white text-lg font-bold whitespace-nowrap tracking-wide
-          transition-all duration-300 ease-in-out
-          ${
-            isActive
-              ? 'opacity-0 invisible bottom-0 left-1/2 -translate-x-1/2 rotate-0'
-              : 'opacity-100 visible w-auto text-left bottom-28 left-1/2 -translate-x-1/2 -rotate-90 origin-center'
-          }
-        `}
-        style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}
-      >
-        {item.title}
-      </span>
+      {/* Collapsed vertical label */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        paddingBottom: '28px',
+        opacity: isActive ? 0 : 1,
+        transition: 'opacity 0.25s ease',
+        pointerEvents: isActive ? 'none' : 'auto',
+      }}>
+        <span style={{
+          color: '#fff', fontWeight: 600, fontSize: '0.75rem',
+          letterSpacing: '0.1em', whiteSpace: 'nowrap',
+          writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+          fontFamily: 'inherit',
+        }}>
+          {item.title}
+        </span>
+      </div>
     </div>
   );
 };
@@ -109,97 +131,216 @@ export default function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f0f4ff] via-white to-[#dce1ff] font-sans flex flex-col relative overflow-hidden">
-      
-      {/* Background decoration */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-400 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 pointer-events-none"></div>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #eef2ff 0%, #ffffff 50%, #e0e7ff 100%)',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box',
+    }}>
 
-      {/* ── NAVBAR ── */}
-      <header className="relative z-20 w-full px-8 py-5 flex items-center">
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="EventZen Logo"
-            className="w-10 h-10 rounded-xl shadow-md border border-white"
-          />
-          <span className="text-[#1E3A8A] font-extrabold text-2xl tracking-tight">EventZen</span>
-        </div>
-      </header>
+      {/* ── HERO SECTION ── */}
+      <main style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        paddingTop: '80px', /* space for existing fixed navbar */
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '48px 72px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '80px',
+          boxSizing: 'border-box',
+        }}>
 
-      {/* ── MAIN CONTENT ── */}
-      <main className="flex-1 flex items-center relative z-10">
-        <section className="container mx-auto px-6 max-w-[1500px] w-full">
-          <div className="flex flex-col xl:flex-row items-center justify-between gap-16 xl:gap-20">
+          {/* ── LEFT COLUMN ── */}
+          <div style={{
+            flexShrink: 0,
+            width: '400px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+          }}>
 
-            {/* LEFT SIDE */}
-            <div className="w-full xl:w-5/12 flex flex-col justify-center text-center xl:text-left max-w-[560px] mx-auto xl:mx-0">
-
-              {/* Headline */}
-              <h1 className="text-4xl md:text-5xl xl:text-[3.25rem] font-extrabold text-[#191c1e] leading-[1.2] tracking-tight">
-                Plan, Manage <br className="hidden xl:block" />
-                &amp; Scale Events
-                <span className="block text-[#1E3A8A] mt-1">
-                  Seamlessly
-                </span>
-              </h1>
-
-              {/* Subtext */}
-              <p className="mt-5 text-base md:text-lg text-[#4b5563] leading-relaxed max-w-[480px] mx-auto xl:mx-0">
-                Manage venues, vendors, bookings, and budgets — all in one powerful platform designed for modern event planning.
-              </p>
-
-              {/* Buttons */}
-              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center xl:justify-start gap-3">
-                <button
-                  onClick={() => navigate('/register')}
-                  className="w-full sm:w-auto bg-[#1E3A8A] text-white font-semibold px-8 py-3 rounded-xl shadow-lg hover:bg-[#152a6b] hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 text-sm md:text-base"
-                >
-                  Get Started
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                </button>
-
-                <button
-                  onClick={() => navigate('/login')}
-                  className="w-full sm:w-auto bg-white text-[#1E3A8A] font-semibold px-8 py-3 rounded-xl border border-[#1E3A8A]/25 hover:bg-blue-50 transition-all duration-200 text-sm md:text-base"
-                >
-                  Login to Account
-                </button>
-              </div>
-
-              {/* Highlights */}
-              <div className="mt-7 flex flex-col sm:flex-row items-center justify-center xl:justify-start gap-5 text-sm font-medium text-[#6b7280]">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs font-bold">✓</div>
-                  All-in-one Platform
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[#1E3A8A] text-xs font-bold">✓</div>
-                  Instant Setup
-                </div>
-              </div>
-
+            {/* Eyebrow badge */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '999px',
+              padding: '7px 16px',
+              marginBottom: '32px',
+            }}>
+              <span style={{
+                width: '7px', height: '7px',
+                borderRadius: '50%',
+                background: '#3b82f6',
+                display: 'inline-block',
+                flexShrink: 0,
+              }} />
+              <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#1d4ed8', letterSpacing: '0.02em' }}>
+                Event management, reimagined
+              </span>
             </div>
 
-            {/* RIGHT SIDE — untouched */}
-            <div className="w-full xl:w-7/12 flex items-center justify-center xl:justify-end">
-              <div
-                className="flex flex-row items-center justify-start xl:justify-end gap-3 md:gap-4 overflow-x-auto xl:overflow-visible pb-8 pt-4 px-4 w-full scrollbar-hide"
-                style={{ scrollbarWidth: 'none' }}
+            {/* Headline */}
+            <h1 style={{
+              fontSize: '2.75rem',
+              fontWeight: 800,
+              lineHeight: 1.12,
+              letterSpacing: '-0.03em',
+              color: '#0f172a',
+              margin: '0 0 0 0',
+              padding: 0,
+            }}>
+              Plan, Manage<br />& Scale Events
+            </h1>
+            <h1 style={{
+              fontSize: '2.75rem',
+              fontWeight: 800,
+              lineHeight: 1.12,
+              letterSpacing: '-0.03em',
+              color: '#2563eb',
+              margin: '6px 0 0 0',
+              padding: 0,
+            }}>
+              Seamlessly.
+            </h1>
+
+            {/* Accent rule */}
+            <div style={{
+              width: '44px',
+              height: '3px',
+              borderRadius: '99px',
+              background: '#2563eb',
+              opacity: 0.3,
+              marginTop: '28px',
+              marginBottom: '20px',
+            }} />
+
+            {/* Body copy */}
+            <p style={{
+              fontSize: '1rem',
+              lineHeight: 1.75,
+              color: '#64748b',
+              margin: 0,
+              padding: 0,
+              maxWidth: '360px',
+            }}>
+              Manage venues, vendors, bookings, and budgets — all in one powerful platform built for modern event planning.
+            </p>
+
+            {/* CTA Buttons */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              marginTop: '40px',
+            }}>
+              <button
+                onClick={() => navigate('/register')}
+                onMouseEnter={e => { e.currentTarget.style.background = '#1e293b'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#0f172a'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: '#0f172a',
+                  color: '#ffffff',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  padding: '14px 26px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 18px rgba(15,23,42,0.25)',
+                  transition: 'background 0.2s, transform 0.15s',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
               >
-                {accordionItems.map((item, index) => (
-                  <AccordionItem
-                    key={item.id}
-                    item={item}
-                    isActive={index === activeIndex}
-                    onMouseEnter={() => setActiveIndex(index)}
-                  />
-                ))}
-              </div>
+                Create Your Account
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              <button
+                onClick={() => navigate('/login')}
+                onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                style={{
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  padding: '14px 26px',
+                  borderRadius: '14px',
+                  border: '1.5px solid #cbd5e1',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s, border-color 0.2s',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Log In
+              </button>
+            </div>
+
+            {/* Trust line */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '24px',
+              marginTop: '28px',
+            }}>
+              {['No credit card required', '14-day free trial', 'Instant setup'].map(text => (
+                <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap' }}>{text}</span>
+                </div>
+              ))}
             </div>
 
           </div>
-        </section>
+
+          {/* ── RIGHT COLUMN (accordion) ── */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            minWidth: 0,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              overflowX: 'auto',
+              paddingBottom: '8px',
+              scrollbarWidth: 'none',
+            }}>
+              {accordionItems.map((item, index) => (
+                <AccordionItem
+                  key={item.id}
+                  item={item}
+                  isActive={index === activeIndex}
+                  onMouseEnter={() => setActiveIndex(index)}
+                />
+              ))}
+            </div>
+          </div>
+
+        </div>
       </main>
     </div>
   );
