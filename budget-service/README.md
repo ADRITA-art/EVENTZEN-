@@ -332,6 +332,14 @@ npm run test:unit
 npm run test:integration
 ```
 
+Windows PowerShell (from repository root):
+
+```powershell
+Push-Location budget-service; npm test; Pop-Location
+Push-Location budget-service; npm run test:unit; Pop-Location
+Push-Location budget-service; npm run test:integration; Pop-Location
+```
+
 How environment variables are consumed:
 
 - `dotenv` loads `.env` at startup in `src/app.js`

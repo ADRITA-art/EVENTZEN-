@@ -3,6 +3,7 @@ package com.adrita.eventzen.controller;
 import com.adrita.eventzen.dto.VenueRequest;
 import com.adrita.eventzen.dto.VenueResponse;
 import com.adrita.eventzen.service.VenueService;
+import com.adrita.eventzen.util.PaginationUtils;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,6 +50,15 @@ public class VenueController {
     }
 
     @GetMapping
+    public ResponseEntity<?> getAllVenues(@RequestParam(required = false) Integer page,
+                                          @RequestParam(required = false) Integer size) {
+        List<VenueResponse> venues = venueService.getAllVenues();
+        if (page == null && size == null) {
+            return ResponseEntity.ok(venues);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(venues, page, size));
+    }
+
     public ResponseEntity<List<VenueResponse>> getAllVenues() {
         return ResponseEntity.ok(venueService.getAllVenues());
     }
@@ -59,9 +69,19 @@ public class VenueController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<VenueResponse>> searchVenues(
+    public ResponseEntity<?> searchVenues(
             @RequestParam(required = false) String location,
-            @RequestParam(required = false) Integer capacity) {
+            @RequestParam(required = false) Integer capacity,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        List<VenueResponse> venues = venueService.searchVenues(location, capacity);
+        if (page == null && size == null) {
+            return ResponseEntity.ok(venues);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(venues, page, size));
+    }
+
+    public ResponseEntity<List<VenueResponse>> searchVenues(String location, Integer capacity) {
         return ResponseEntity.ok(venueService.searchVenues(location, capacity));
     }
 }

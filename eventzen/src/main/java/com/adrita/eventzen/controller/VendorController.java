@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.adrita.eventzen.util.PaginationUtils;
 import java.util.List;
 
 @RestController
@@ -37,8 +39,25 @@ public class VendorController {
     }
 
     @GetMapping
-    public ResponseEntity<List<VendorResponse>> getAllVendors(
-            @AuthenticationPrincipal User user) {
+    public ResponseEntity<?> getAllVendors(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        List<VendorResponse> vendors;
+        if (user.getRole() == Role.ADMIN) {
+            vendors = vendorService.getAllVendors();
+        } else {
+            vendors = vendorService.getAllActiveVendors();
+        }
+
+        if (page == null && size == null) {
+            return ResponseEntity.ok(vendors);
+        }
+
+        return ResponseEntity.ok(PaginationUtils.paginate(vendors, page, size));
+    }
+
+    public ResponseEntity<List<VendorResponse>> getAllVendors(@AuthenticationPrincipal User user) {
         if (user.getRole() == Role.ADMIN) {
             return ResponseEntity.ok(vendorService.getAllVendors());
         }

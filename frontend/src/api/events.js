@@ -1,13 +1,25 @@
 import api from './axiosInstance';
+import { toList, toPage } from './pagination';
 
-export const getUpcomingEvents = () => api.get('/events/upcoming');
+export const getUpcomingEvents = (params) =>
+  api.get('/events/upcoming', { params }).then((res) => ({
+    ...res,
+    data: params ? toPage(res.data) : toList(res.data),
+  }));
 
-export const getAllEvents = () => api.get('/events');
+export const getAllEvents = (params) =>
+  api.get('/events', { params }).then((res) => ({
+    ...res,
+    data: params ? toPage(res.data) : toList(res.data),
+  }));
 
 export const getEventById = (id) => api.get(`/events/${id}`);
 
-export const searchEvents = (date, location) =>
-  api.get('/events/search', { params: { date, location } });
+export const searchEvents = (date, location, params) =>
+  api.get('/events/search', { params: { date, location, ...params } }).then((res) => ({
+    ...res,
+    data: params ? toPage(res.data) : toList(res.data),
+  }));
 
 export const createEvent = (data) => api.post('/events', data);
 

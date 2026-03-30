@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Users, Trash2, AlertCircle, CheckCircle, Search } from 'lucide-react';
 import { getAllUsers, deleteUser } from '../../api/users';
-import StatusBadge from '../../components/ui/StatusBadge';
 import Spinner from '../../components/ui/Spinner';
+import PaginationControls from '../../components/ui/PaginationControls';
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
@@ -10,17 +10,24 @@ export default function UsersPage() {
   const [msg, setMsg] = useState(null);
   const [query, setQuery] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 0 });
 
-  const load = async () => {
+  const load = async (nextPage = page, nextSize = size) => {
     setLoading(true);
     try {
-      const res = await getAllUsers();
-      setUsers(res.data);
+      const res = await getAllUsers({ page: nextPage, size: nextSize });
+      setUsers(res.data.content);
+      setPagination({
+        totalElements: res.data.totalElements,
+        totalPages: res.data.totalPages,
+      });
     } catch (_) {}
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page, size); }, [page, size]);
 
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Delete user "${name}"? This action cannot be undone.`)) return;
@@ -28,7 +35,7 @@ export default function UsersPage() {
     try {
       await deleteUser(id);
       setMsg({ type: 'success', text: `User "${name}" deleted.` });
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data || 'Failed to delete user.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error deleting user.' });
@@ -123,6 +130,20 @@ export default function UsersPage() {
             </div>
           )}
         </div>
+      )}
+
+      {!loading && (
+        <PaginationControls
+          page={page}
+          size={size}
+          totalElements={pagination.totalElements}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+          onSizeChange={(nextSize) => {
+            setSize(nextSize);
+            setPage(0);
+          }}
+        />
       )}
     </div>
   );

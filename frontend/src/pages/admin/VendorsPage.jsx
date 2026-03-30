@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { getAllVendors, createVendor, updateVendor, deleteVendor } from '../../api/vendors';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import PaginationControls from '../../components/ui/PaginationControls';
 import { isValidEmail, isValidPhone } from '../../utils/validation';
 import { isNonNegativeNumber, isRequiredText, toTrimmed } from '../../utils/validation';
 
@@ -24,16 +25,20 @@ export default function VendorsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 0 });
 
-  const load = async () => {
+  const load = async (nextPage = page, nextSize = size) => {
     setLoading(true);
     try {
-      const { data } = await getAllVendors();
-      setVendors(data);
+      const { data } = await getAllVendors({ page: nextPage, size: nextSize });
+      setVendors(data.content);
+      setPagination({ totalElements: data.totalElements, totalPages: data.totalPages });
     } catch (_) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page, size); }, [page, size]);
 
   const openCreate = () => { setForm(emptyForm); setModal({ mode: 'create' }); };
   const openEdit = (v) => {
@@ -98,7 +103,7 @@ export default function VendorsPage() {
       else await updateVendor(modal.vendor.id, payload);
       setMsg({ type: 'success', text: `Vendor ${modal.mode === 'create' ? 'created' : 'updated'}.` });
       setModal(null);
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data?.message || err.response?.data || 'Failed to save vendor.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error saving vendor.' });
@@ -111,7 +116,7 @@ export default function VendorsPage() {
     try {
       await deleteVendor(id);
       setMsg({ type: 'success', text: `Vendor "${name}" deleted.` });
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data || 'Failed to delete vendor.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error.' });
@@ -185,6 +190,20 @@ export default function VendorsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && (
+        <PaginationControls
+          page={page}
+          size={size}
+          totalElements={pagination.totalElements}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+          onSizeChange={(nextSize) => {
+            setSize(nextSize);
+            setPage(0);
+          }}
+        />
       )}
 
       {modal && (

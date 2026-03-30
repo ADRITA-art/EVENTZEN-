@@ -5,6 +5,7 @@ import com.adrita.eventzen.dto.BookingResponse;
 import com.adrita.eventzen.dto.BookingStatusUpdateRequest;
 import com.adrita.eventzen.dto.EventBookingSummaryResponse;
 import com.adrita.eventzen.service.BookingService;
+import com.adrita.eventzen.util.PaginationUtils;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -40,8 +42,18 @@ public class BookingController {
 
     @GetMapping("/my")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<List<BookingResponse>> getMyBookings(
-            @AuthenticationPrincipal com.adrita.eventzen.entity.User user) {
+    public ResponseEntity<?> getMyBookings(
+            @AuthenticationPrincipal com.adrita.eventzen.entity.User user,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        List<BookingResponse> bookings = bookingService.getMyBookings(user.getEmail());
+        if (page == null && size == null) {
+            return ResponseEntity.ok(bookings);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(bookings, page, size));
+    }
+
+    public ResponseEntity<List<BookingResponse>> getMyBookings(@AuthenticationPrincipal com.adrita.eventzen.entity.User user) {
         return ResponseEntity.ok(bookingService.getMyBookings(user.getEmail()));
     }
 
@@ -56,13 +68,32 @@ public class BookingController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getAllBookings(@RequestParam(required = false) Integer page,
+                                            @RequestParam(required = false) Integer size) {
+        List<BookingResponse> bookings = bookingService.getAllBookings();
+        if (page == null && size == null) {
+            return ResponseEntity.ok(bookings);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(bookings, page, size));
+    }
+
     public ResponseEntity<List<BookingResponse>> getAllBookings() {
         return ResponseEntity.ok(bookingService.getAllBookings());
     }
 
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<BookingResponse>> getBookingsByEvent(@PathVariable Long eventId) {
+    public ResponseEntity<?> getBookingsByEvent(@PathVariable Long eventId,
+                                                @RequestParam(required = false) Integer page,
+                                                @RequestParam(required = false) Integer size) {
+        List<BookingResponse> bookings = bookingService.getBookingsByEvent(eventId);
+        if (page == null && size == null) {
+            return ResponseEntity.ok(bookings);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(bookings, page, size));
+    }
+
+    public ResponseEntity<List<BookingResponse>> getBookingsByEvent(Long eventId) {
         return ResponseEntity.ok(bookingService.getBookingsByEvent(eventId));
     }
 

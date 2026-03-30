@@ -1,11 +1,19 @@
 import api from './axiosInstance';
+import { toList, toPage } from './pagination';
 
-export const getVenues = () => api.get('/venues');
+export const getVenues = (params) =>
+  api.get('/venues', { params }).then((res) => ({
+    ...res,
+    data: params ? toPage(res.data) : toList(res.data),
+  }));
 
 export const getVenueById = (id) => api.get(`/venues/${id}`);
 
-export const searchVenues = (location, capacity) =>
-  api.get('/venues/search', { params: { location, capacity } });
+export const searchVenues = (location, capacity, params) =>
+  api.get('/venues/search', { params: { location, capacity, ...params } }).then((res) => ({
+    ...res,
+    data: params ? toPage(res.data) : toList(res.data),
+  }));
 
 export const createVenue = (data) => api.post('/venues', data);
 

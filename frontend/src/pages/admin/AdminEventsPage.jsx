@@ -7,6 +7,7 @@ import { getBudgetByEvent, setBudgetForEvent, getExpensesByEvent, addExpense, de
 import Modal from '../../components/ui/Modal';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Spinner from '../../components/ui/Spinner';
+import PaginationControls from '../../components/ui/PaginationControls';
 import {
   isNonNegativeNumber,
   isPositiveInteger,
@@ -69,21 +70,29 @@ export default function AdminEventsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 0 });
 
   const selectedVenue = venues.find((v) => String(v.id) === String(form.venueId));
   const maxForCapacity = selectedVenue ? selectedVenue.capacity : undefined;
 
-  const load = async () => {
+  const load = async (nextPage = page, nextSize = size) => {
     setLoading(true);
     try {
-      const [er, vr, venR] = await Promise.all([getAllEvents(), getVenues(), getAllVendors()]);
-      setEvents(er.data);
+      const [er, vr, venR] = await Promise.all([
+        getAllEvents({ page: nextPage, size: nextSize }),
+        getVenues(),
+        getAllVendors(),
+      ]);
+      setEvents(er.data.content);
+      setPagination({ totalElements: er.data.totalElements, totalPages: er.data.totalPages });
       setVenues(vr.data);
       setAllVendors(venR.data);
     } catch (_) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page, size); }, [page, size]);
 
   const openCreate = () => { setForm(emptyForm); setModal({ mode: 'create' }); };
   const openEdit = (ev) => {
@@ -144,7 +153,7 @@ export default function AdminEventsPage() {
       else await updateEvent(modal.event.id, payload);
       setMsg({ type: 'success', text: `Event ${modal.mode === 'create' ? 'created' : 'updated'}.` });
       setModal(null);
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data?.message || err.response?.data || 'Failed to save event.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error saving event.' });
@@ -157,7 +166,7 @@ export default function AdminEventsPage() {
     try {
       await cancelEvent(id);
       setMsg({ type: 'success', text: `Event "${name}" cancelled.` });
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data || 'Failed to cancel event.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error.' });
@@ -381,6 +390,20 @@ export default function AdminEventsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && (
+        <PaginationControls
+          page={page}
+          size={size}
+          totalElements={pagination.totalElements}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+          onSizeChange={(nextSize) => {
+            setSize(nextSize);
+            setPage(0);
+          }}
+        />
       )}
 
       {modal && (

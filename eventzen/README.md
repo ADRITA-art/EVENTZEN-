@@ -492,6 +492,19 @@ mvn -Dtest='*Test' test
 mvn -Dtest='*IntegrationTest' test
 ```
 
+Windows PowerShell (from repository root):
+
+```powershell
+# Run full test suite
+Push-Location eventzen; .\mvnw.cmd test; Pop-Location
+
+# Run only unit/controller/service style tests
+Push-Location eventzen; .\mvnw.cmd "-Dtest=*Test" test; Pop-Location
+
+# Run integration-focused tests
+Push-Location eventzen; .\mvnw.cmd "-Dtest=*IntegrationTest" test; Pop-Location
+```
+
 Note:
 
 - Integration test naming follows `*IntegrationTest` pattern in this codebase.

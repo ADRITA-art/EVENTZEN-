@@ -3,6 +3,7 @@ package com.adrita.eventzen.controller;
 import com.adrita.eventzen.dto.EventRequest;
 import com.adrita.eventzen.dto.EventResponse;
 import com.adrita.eventzen.service.EventService;
+import com.adrita.eventzen.util.PaginationUtils;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -51,8 +52,13 @@ public class EventController {
     }
 
     @GetMapping
-    public ResponseEntity<List<EventResponse>> getAllEvents() {
-        return ResponseEntity.ok(eventService.getAllEvents());
+    public ResponseEntity<?> getAllEvents(@RequestParam(required = false) Integer page,
+                                          @RequestParam(required = false) Integer size) {
+        List<EventResponse> events = eventService.getAllEvents();
+        if (page == null && size == null) {
+            return ResponseEntity.ok(events);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(events, page, size));
     }
 
     @GetMapping("/{id}")
@@ -61,19 +67,36 @@ public class EventController {
     }
 
     @GetMapping("/venue/{venueId}")
-    public ResponseEntity<List<EventResponse>> getEventsByVenue(@PathVariable Long venueId) {
-        return ResponseEntity.ok(eventService.getEventsByVenue(venueId));
+    public ResponseEntity<?> getEventsByVenue(@PathVariable Long venueId,
+                                              @RequestParam(required = false) Integer page,
+                                              @RequestParam(required = false) Integer size) {
+        List<EventResponse> events = eventService.getEventsByVenue(venueId);
+        if (page == null && size == null) {
+            return ResponseEntity.ok(events);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(events, page, size));
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<EventResponse>> searchEvents(
+    public ResponseEntity<?> searchEvents(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) String location) {
-        return ResponseEntity.ok(eventService.searchEvents(date, location));
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        List<EventResponse> events = eventService.searchEvents(date, location);
+        if (page == null && size == null) {
+            return ResponseEntity.ok(events);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(events, page, size));
     }
 
     @GetMapping("/upcoming")
-    public ResponseEntity<List<EventResponse>> getUpcomingEvents() {
-        return ResponseEntity.ok(eventService.getUpcomingEvents());
+    public ResponseEntity<?> getUpcomingEvents(@RequestParam(required = false) Integer page,
+                                               @RequestParam(required = false) Integer size) {
+        List<EventResponse> events = eventService.getUpcomingEvents();
+        if (page == null && size == null) {
+            return ResponseEntity.ok(events);
+        }
+        return ResponseEntity.ok(PaginationUtils.paginate(events, page, size));
     }
 }

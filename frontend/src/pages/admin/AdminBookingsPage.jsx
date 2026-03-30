@@ -6,6 +6,7 @@ import {
 import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import PaginationControls from '../../components/ui/PaginationControls';
 
 const STATUS_OPTIONS = ['CONFIRMED', 'CANCELLED'];
 
@@ -18,20 +19,27 @@ export default function AdminBookingsPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [filterEvent, setFilterEvent] = useState('');
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 0 });
 
-  const load = async () => {
+  const load = async (nextPage = page, nextSize = size) => {
     setLoading(true);
-    try { const r = await getAllBookings(); setBookings(r.data); } catch (_) {}
+    try {
+      const r = await getAllBookings({ page: nextPage, size: nextSize });
+      setBookings(r.data.content);
+      setPagination({ totalElements: r.data.totalElements, totalPages: r.data.totalPages });
+    } catch (_) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page, size); }, [page, size]);
 
   const handleStatusChange = async (id, status) => {
     setUpdatingId(id);
     try {
       await updateBookingStatus(id, status);
       setMsg({ type: 'success', text: `Booking #${id} status updated to ${status}.` });
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data?.message || err.response?.data || 'Failed to update status.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error updating status.' });
@@ -138,6 +146,20 @@ export default function AdminBookingsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && (
+        <PaginationControls
+          page={page}
+          size={size}
+          totalElements={pagination.totalElements}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+          onSizeChange={(nextSize) => {
+            setSize(nextSize);
+            setPage(0);
+          }}
+        />
       )}
 
       {/* Event Booking Summary Modal */}

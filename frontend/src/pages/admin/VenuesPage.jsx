@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, MapPin, AlertCircle, CheckCircle, X } from 'lucide
 import { getVenues, createVenue, updateVenue, deleteVenue } from '../../api/venues';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import PaginationControls from '../../components/ui/PaginationControls';
 import {
   isNonNegativeNumber,
   isPositiveInteger,
@@ -26,13 +27,20 @@ export default function VenuesPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [pagination, setPagination] = useState({ totalElements: 0, totalPages: 0 });
 
-  const load = async () => {
+  const load = async (nextPage = page, nextSize = size) => {
     setLoading(true);
-    try { const r = await getVenues(); setVenues(r.data); } catch (_) {}
+    try {
+      const r = await getVenues({ page: nextPage, size: nextSize });
+      setVenues(r.data.content);
+      setPagination({ totalElements: r.data.totalElements, totalPages: r.data.totalPages });
+    } catch (_) {}
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page, size); }, [page, size]);
 
   const openCreate = () => { setForm(emptyForm); setModal({ mode: 'create' }); };
   const openEdit = (v) => {
@@ -96,7 +104,7 @@ export default function VenuesPage() {
       else await updateVenue(modal.venue.id, payload);
       setMsg({ type: 'success', text: `Venue ${modal.mode === 'create' ? 'created' : 'updated'} successfully.` });
       setModal(null);
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data?.message || err.response?.data || 'Failed to save venue.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error saving venue.' });
@@ -109,7 +117,7 @@ export default function VenuesPage() {
     try {
       await deleteVenue(id);
       setMsg({ type: 'success', text: `Venue "${name}" deleted.` });
-      load();
+      load(page, size);
     } catch (err) {
       const m = err.response?.data || 'Failed to delete venue.';
       setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error deleting.' });
@@ -172,6 +180,20 @@ export default function VenuesPage() {
             </div>
           )}
         </div>
+      )}
+
+      {!loading && (
+        <PaginationControls
+          page={page}
+          size={size}
+          totalElements={pagination.totalElements}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+          onSizeChange={(nextSize) => {
+            setSize(nextSize);
+            setPage(0);
+          }}
+        />
       )}
 
       {modal && (
