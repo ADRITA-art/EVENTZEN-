@@ -1,450 +1,300 @@
 # EventZen Budget Tracking Microservice
 
-A dedicated financial microservice for EventZen that manages event budgets, expenses, and profitability metrics.
+*A finance-focused microservice implementing strict data ownership, transactional consistency, and controlled integration with the EventZen core backend.*
 
-## 1. Service Overview
+This document describes the Budget Service as a finance-focused microservice in the EventZen platform.
 
-The Budget Tracking Microservice is an independent backend service responsible for financial tracking in EventZen.
+## 1. 🚀 Service Overview
 
-Its purpose is to:
+The Budget Service solves a domain ownership problem common in event systems: financial planning and spend tracking should not be tightly coupled to operational event workflows.
 
-- Store and update budget baselines per event.
-- Track real expenses as they occur.
-- Keep financial summaries consistent and queryable.
-- Compute key outputs such as remaining budget and profit.
+What this service is responsible for:
 
-Role in the EventZen ecosystem:
+- Budget baselines per event (`estimatedCost`, `totalBudget`)
+- Real expense tracking (`Expense` rows)
+- Financial outcome values (`remainingBudget`, `profit`)
+- Revenue synchronization from the core booking domain
 
-- Event and booking operations happen in the Spring Boot core backend.
-- Financial state is managed in this service only.
-- Spring backend calls this service internally and exposes controlled proxy endpoints to the frontend.
+Why this is a separate microservice:
 
-This service is intentionally isolated so financial logic and financial data ownership are not mixed with core event domain logic.
+- Finance has a different rate of change than event operations
+- Financial data needs stronger domain isolation and clearer ownership
+- Separation reduces accidental coupling between booking logic and spending logic
+- Independent deployment boundaries reduce blast radius for finance changes
 
-## 2. Architecture
+## 2. 🧠 Architecture & Design Rationale
 
-### Service Style
+### Why Node.js + Express
 
-- Standalone Node.js service using Express.
-- Persistence layer implemented with Sequelize ORM.
-- PostgreSQL-backed storage for financial records.
+- Lightweight runtime and fast API iteration for a focused internal service
+- Simple middleware pipeline supports strict internal-auth guard rails
+- Low operational overhead for a bounded finance domain
 
-### Database Separation
+### Why PostgreSQL
 
-This service owns its own database schema and tables:
+- Strong relational semantics for monetary records and constrained updates
+- Reliable transaction behavior for expense add/delete and `actualCost` updates
+- Mature ecosystem for production operations and backups
 
-- No direct foreign keys to Spring core service tables.
-- Event IDs are treated as external references (trusted inputs from core backend).
+### Why Sequelize
 
-### Communication Pattern
+- Model-level constraints and validation for financial fields
+- Transaction APIs used to keep `Expense` and `EventBudget.actualCost` in sync
+- Faster development while retaining explicit table structure and constraints
 
-- REST-based service-to-service communication.
-- Core Spring Boot backend invokes Budget Service endpoints over internal URLs.
-- Budget Service is protected by an internal service key header.
+### Why REST (and not async messaging yet)
 
-### Database-per-Service Pattern
+- Immediate request/response feedback for finance synchronization success/failure
+- Simpler operational model for current team size and scope
+- Lower cognitive and infrastructure complexity than introducing broker infrastructure at this stage
 
-This microservice follows database-per-service principles:
+Trade-off:
 
-- Independent deployment and schema evolution.
-- No cross-service joins.
-- Strong data ownership boundaries for finance domain.
+- Synchronous calls increase runtime dependency between services
+- Future event-driven async patterns can improve resilience at higher scale
 
-## 3. Core Financial Model (Critical)
+## 3. 🧩 Microservice Design Principles Applied
 
-Each event has a financial snapshot in EventBudget.
+### Database-per-Service
 
-### Definitions
+- Budget Service owns its own PostgreSQL schema and lifecycle
+- No shared tables with the core Spring backend
 
-- Total Budget: Admin-defined spending ceiling. It can be null when not set yet.
-- Estimated Cost: Planning estimate from event setup (venue plus vendor costs).
-- Actual Cost: Source-of-truth expense total derived from expense operations.
-- Revenue: External input from booking system via core backend sync.
-- Remaining Budget: Unspent budget capacity (if total budget exists).
-- Profit: Net outcome from revenue minus actual cost.
+### Loose Coupling via `eventId`
 
-### Formulas
+- `eventId` is treated as an external reference key
+- Core service owns event lifecycle and identity; Budget Service owns financial state
 
-- Remaining Budget = totalBudget - actualCost
-- Profit = revenue - actualCost
+### No Cross-Service Foreign Keys (and Why It Matters)
 
-### Important Semantics
+- Avoids direct database coupling between services
+- Preserves independent deployability and schema evolution
+- Prevents runtime failures caused by cross-service database dependencies
 
-- Estimated Cost is advisory and planning-oriented, not a hard constraint.
-- Actual Cost is authoritative for realized spending.
-- Revenue is externally synchronized input, not computed internally from bookings.
-
-### Example
-
-Assume:
-
-- totalBudget = 10000.00
-- estimatedCost = 7200.00
-- actualCost = 6400.00
-- revenue = 9500.00
-
-Then:
-
-- remainingBudget = 10000.00 - 6400.00 = 3600.00
-- profit = 9500.00 - 6400.00 = 3100.00
-
-If totalBudget is not set, remainingBudget is returned as null.
-
-## 4. Features and Capabilities
-
-- Create or update estimated event cost from planning updates.
-- Set or update total budget per event.
-- Sync revenue values from booking flow.
-- Add expenses per event and maintain consistent actualCost.
-- List expenses by event, ordered by newest first.
-- Delete expense entries and automatically reverse actualCost impact.
-- Return summarized finance view per event (budget, costs, revenue, remaining budget, profit).
-- Guard all finance APIs behind internal-only authentication.
-- Health endpoint for service/container readiness checks.
-
-## 5. API Documentation
-
-Base path for protected APIs: /api
-
-Authentication required on all /api routes:
-
-- Header: Authorization: Internal-Service-Key <key>
-
-Note on endpoint naming:
-
-- In this implementation, budget create/update behavior is split across specific endpoints:
-  - /api/budget/estimate for estimated planning cost
-  - /api/budget/set for total budget
-  - /api/budget/revenue/:eventId for revenue sync
-
-### A. Internal Admin APIs (used via Spring backend proxy)
-
-#### 1) Upsert Estimated Budget Input
-
-- Method: POST
-- Endpoint: /api/budget/estimate
-- Description: Creates EventBudget when missing or updates estimatedCost when present.
-
-Request body example:
-
-```json
-{
-  "eventId": 101,
-  "estimatedCost": 7200.50
-}
-```
-
-Response example:
-
-```json
-{
-  "id": 1,
-  "eventId": 101,
-  "estimatedCost": "7200.50",
-  "totalBudget": null,
-  "actualCost": "0.00",
-  "revenue": "0.00",
-  "createdAt": "2026-03-29T10:10:10.000Z"
-}
-```
-
-#### 2) Set Total Budget
-
-- Method: POST
-- Endpoint: /api/budget/set
-- Description: Creates EventBudget when missing or updates totalBudget when present.
-
-Request body example:
-
-```json
-{
-  "eventId": 101,
-  "totalBudget": 10000
-}
-```
-
-Response example:
-
-```json
-{
-  "id": 1,
-  "eventId": 101,
-  "estimatedCost": "7200.50",
-  "totalBudget": "10000.00",
-  "actualCost": "0.00",
-  "revenue": "0.00",
-  "createdAt": "2026-03-29T10:10:10.000Z"
-}
-```
-
-#### 3) Sync Revenue
-
-- Method: PUT
-- Endpoint: /api/budget/revenue/:eventId
-- Description: Sets current revenue for the event (upsert behavior if budget row is missing).
-
-Request body example:
-
-```json
-{
-  "revenue": 12500.75
-}
-```
-
-Response example:
-
-```json
-{
-  "id": 1,
-  "eventId": 101,
-  "estimatedCost": "7200.50",
-  "totalBudget": "10000.00",
-  "actualCost": "6400.00",
-  "revenue": "12500.75",
-  "createdAt": "2026-03-29T10:10:10.000Z"
-}
-```
-
-#### 4) Get Budget Summary
-
-- Method: GET
-- Endpoint: /api/budget/:eventId
-- Description: Returns financial summary including derived values.
-
-Response example:
-
-```json
-{
-  "eventId": 101,
-  "totalBudget": "10000.00",
-  "estimatedCost": "7200.50",
-  "actualCost": "6400.00",
-  "revenue": "12500.75",
-  "remainingBudget": "3600.00",
-  "profit": "6100.75"
-}
-```
-
-#### 5) Add Expense
-
-- Method: POST
-- Endpoint: /api/expense
-- Description: Adds an expense row and increments actualCost in one transaction.
-
-Request body example:
-
-```json
-{
-  "eventId": 101,
-  "category": "Catering",
-  "amount": 850.25,
-  "description": "Lunch for attendees"
-}
-```
-
-Response example:
-
-```json
-{
-  "id": 14,
-  "eventId": 101,
-  "category": "Catering",
-  "amount": "850.25",
-  "description": "Lunch for attendees",
-  "createdAt": "2026-03-29T12:30:00.000Z"
-}
-```
-
-#### 6) List Expenses by Event
-
-- Method: GET
-- Endpoint: /api/expense/event/:eventId
-- Description: Returns expense entries for event in descending created time.
-
-Response example:
-
-```json
-[
-  {
-    "id": 14,
-    "eventId": 101,
-    "category": "Catering",
-    "amount": "850.25",
-    "description": "Lunch for attendees",
-    "createdAt": "2026-03-29T12:30:00.000Z"
-  }
-]
-```
-
-#### 7) Delete Expense
-
-- Method: DELETE
-- Endpoint: /api/expense/:id
-- Description: Deletes expense and decrements actualCost in one transaction.
-
-Response example:
-
-```json
-{
-  "message": "Expense deleted successfully",
-  "eventId": 101,
-  "actualCost": "5550.00"
-}
-```
-
-### Mapping to Requested API Labels
-
-If using higher-level labels in architecture docs, these conceptual mappings apply:
-
-- POST /api/budget  -> implemented as POST /api/budget/estimate and POST /api/budget/set
-- GET /api/budget/{eventId} -> implemented as GET /api/budget/:eventId
-- POST /api/expense -> implemented as POST /api/expense
-- GET /api/expense/event/{eventId} -> implemented as GET /api/expense/event/:eventId
-- DELETE /api/expense/{id} -> implemented as DELETE /api/expense/:id
-
-## 6. Validations and Business Rules (Critical)
-
-### Request Validation
-
-- eventId must be a positive integer.
-- estimatedCost, totalBudget, and revenue must be numbers >= 0.
-- expense amount must be a number > 0.
-- category is required and cannot be blank.
-
-### Business Rules
-
-- Only one budget row per event:
-  - Enforced via unique constraint on EventBudget.eventId.
-- Prevent duplicate budget creation:
-  - Upsert logic checks existing row by eventId before create.
-- Handling missing budget scenarios:
-  - get budget summary for unknown eventId returns 404.
-  - add expense without budget returns 404.
-  - revenue or estimate sync can initialize budget record if missing.
-- Consistency of actualCost:
-  - add expense increases actualCost.
-  - delete expense decreases actualCost.
-  - actualCost never becomes negative (clamped at 0.00 on delete path).
-- Cannot delete non-existing expense:
-  - returns 404 with explicit message.
-- EventId validity trust model:
-  - service validates eventId format/range but trusts business ownership from core backend.
-
-## 7. Integration with Core Backend (Very Important)
+## 4. 🔗 Inter-Service Communication
 
 ### Integration Model
 
-- Frontend does not call Budget Service directly.
-- Spring Boot backend acts as integration proxy/orchestrator.
-- Calls are made over internal network URLs (for example Docker service hostname).
+- Frontend does not call Budget Service directly
+- Spring core backend acts as orchestrator/proxy for finance operations
+- Budget Service exposes internal APIs under `/api/*`
 
-### Real System Flows
+### Sync vs Async Trade-offs
 
-#### Flow A: Event Creation or Update -> Estimated Cost Sync
+- Current choice: synchronous REST calls from Spring to Budget Service
+- Benefit: immediate consistency feedback for budget/revenue/expense operations
+- Trade-off: reduced availability when Budget Service is temporarily unavailable
 
-1. Admin creates or updates event planning in Spring backend.
-2. Spring computes planning totals from venue and vendors.
-3. Spring calls Budget Service endpoint: POST /api/budget/estimate.
-4. Budget Service upserts EventBudget.estimatedCost.
+### Internal Service Authentication
 
-#### Flow B: Expense Addition -> Actual Cost Update
+- All `/api/*` routes are guarded by `Authorization: Internal-Service-Key <key>`
+- Missing key configuration fails secure (`500`) to prevent unprotected operation
+- Missing/invalid header returns `401`/`403`
 
-1. Admin adds expense through Spring proxy endpoint.
-2. Spring forwards to Budget Service endpoint: POST /api/expense.
-3. Budget Service inserts Expense row and updates EventBudget.actualCost in one transaction.
-4. Updated summary becomes available through GET /api/budget/:eventId.
+## 5. 💰 Financial Domain Model (Core)
 
-#### Flow C: Booking Confirmation Changes -> Revenue Sync
+The core aggregate is `EventBudget` (one row per `eventId`), with `Expense` as a child stream of spend events.
 
-1. Booking totals change in Spring backend.
-2. Spring computes confirmed revenue aggregate.
-3. Spring calls Budget Service endpoint: PUT /api/budget/revenue/:eventId.
-4. Budget Service updates EventBudget.revenue.
+### EventBudget fields
 
-### Docker Networking Context
+- `eventId`: external event reference, unique within finance domain
+- `estimatedCost`: planning projection (venue/vendors and similar planning inputs)
+- `totalBudget`: optional budget ceiling set by admin
+- `actualCost`: realized spend derived from expense operations
+- `revenue`: externally synchronized income from booking domain
 
-In containerized setup:
+### Expense fields
 
-- Spring uses internal service name for Budget Service base URL.
-- Budget Service and Spring communicate inside Docker network.
-- Budget Service is not required to be publicly exposed for frontend usage.
+- `eventId`: event reference
+- `category`: spend classification
+- `amount`: monetary amount
+- `description`: optional contextual note
 
-## 8. Security
+Why `estimatedCost` is not enforced:
 
-- Internal service model: budget APIs are protected by internal auth middleware.
-- Required header format:
-  - Authorization: Internal-Service-Key <INTERNAL_SERVICE_KEY>
-- Missing key configuration returns server error (500) to prevent unsecured operation.
-- Missing/invalid header returns 401 or 403.
-- No direct frontend integration path by design.
-- Can be extended with stronger service auth (mTLS, rotating API keys, service identity, gateway policy).
+- It is a planning signal, not an execution gate
+- Enforcing it as a hard cap would block legitimate operational expenses
 
-## 9. Database Design
+Why `actualCost` is source of truth:
 
-### Table: EventBudget
+- `actualCost` is transactionally updated from persisted expense events
+- It reflects realized spend, not projection assumptions
 
-- id: integer primary key
-- eventId: integer, unique, required
-- totalBudget: decimal(12,2), nullable
-- estimatedCost: decimal(12,2), required, default 0
-- actualCost: decimal(12,2), required, default 0
-- revenue: decimal(12,2), required, default 0
-- createdAt: timestamp
+## 6. 🧮 Core Calculations & Invariants
 
-### Table: Expense
+Core formulas:
 
-- id: integer primary key
-- eventId: integer, required
-- category: string, required
-- amount: decimal(12,2), required
-- description: string, nullable
-- createdAt: timestamp
+- `remainingBudget = totalBudget - actualCost` (null when `totalBudget` is null)
+- `profit = revenue - actualCost`
 
-### Why No Foreign Keys to Core Service
+Domain invariants:
 
-No cross-service foreign key is used to preserve microservice independence:
+- Exactly one `EventBudget` row per event (`eventId` unique)
+- `actualCost` changes only through expense add/delete flows
+- Monetary values are non-negative where required by model validation
+- Expense delete path clamps `actualCost` to a minimum of `0.00`
 
-- Independent schema lifecycle.
-- No runtime coupling to core DB availability.
-- Clear ownership boundary for financial data.
+## 7. 🔄 Data Consistency Strategy
 
-## 10. Error Handling
+This service maintains consistency without distributed transactions by combining local ACID transactions with explicit service boundaries.
 
-### Response Style
+How consistency is preserved:
 
-Error responses are JSON with message field:
+- Expense creation and `actualCost` increment happen in one DB transaction
+- Expense deletion and `actualCost` decrement happen in one DB transaction
+- Row-level locking is used during mutation paths to reduce race conditions
 
-```json
-{
-  "message": "Descriptive error message"
-}
-```
+Cross-service consistency model:
 
-### Common Cases
+- Strong consistency inside Budget Service transaction boundaries
+- Coordinated consistency with core backend through synchronous orchestration
 
-- 400: invalid payload values (invalid eventId, invalid amount, missing category).
-- 401: missing internal authorization header.
-- 403: invalid internal service key.
-- 404: missing budget or expense not found.
-- 500: internal key not configured or unhandled server failure.
+Partial failure posture:
 
-### Behavior Notes
+- If finance sync fails, caller can treat operation as failed and avoid silent divergence
+- This favors consistency over availability in current architecture
 
-- Missing budget for summary endpoint returns graceful 404.
-- Transactional paths protect consistency for expense add/delete operations.
-- HTTP logging enabled via morgan for debugging and traceability.
+The system prioritizes **consistency over availability** for financial correctness.
 
-## 11. Setup and Installation
+## 8. ⚠️ Failure Handling & Edge Cases
 
-### Prerequisites
+### Budget Service Unavailable
 
-- Node.js 20+
-- PostgreSQL 16+ (or compatible)
-- Docker (optional)
+- Upstream orchestration calls fail fast
+- This prevents successful operational mutations with missing financial synchronization
+- No retry mechanism is implemented at this layer; retry responsibility lies with the calling service.
 
-### Environment Variables
+### Duplicate Requests
 
-Create .env in budget-service directory:
+- Upsert endpoints (`/budget/estimate`, `/budget/set`, `/budget/revenue/:eventId`) are naturally overwrite-oriented
+- Expense create is not idempotent by default and may duplicate spend if retried blindly
+
+### Missing Budget Rows
+
+- Summary endpoint returns `404` when no budget exists for event
+- Expense add returns `404` if budget row does not exist
+- Revenue and planning updates can initialize a budget row via upsert behavior
+
+### Idempotency Concerns
+
+- Revenue sync is overwrite-based and retry-safe for same target value
+- Expense mutation paths need upstream retry discipline
+- Recommended next step: idempotency keys for mutation endpoints
+
+## 9. 🔐 Security Model
+
+Current security controls:
+
+- Internal shared-secret header (`Internal-Service-Key`) on all business endpoints
+- No public route to mutate/read financial data from browsers
+- `/health` remains open for liveness/readiness probing
+
+Why frontend is blocked:
+
+- Prevents exposing internal finance contracts and credentials
+- Keeps policy enforcement centralized in core backend
+
+Future hardening:
+
+- mTLS between services
+- API gateway policy enforcement
+- Key rotation and secret management integration
+
+## 10. 🗄️ Database Design
+
+### `EventBudget` schema intent
+
+- Finance summary aggregate keyed by unique `eventId`
+- Stores planning (`estimatedCost`), governance (`totalBudget`), actuals (`actualCost`), and outcome input (`revenue`)
+
+Why unique per event:
+
+- Guarantees a single authoritative financial snapshot per event
+- Simplifies upsert logic and summary query behavior
+
+### `Expense` schema intent
+
+- Append-style spend records with category/amount/description
+- Enables audit-friendly spend history and ordered retrieval
+
+Why `Expense` is separate from `EventBudget`:
+
+- Preserves event-level financial summary while retaining line-item detail
+- Supports recalculation and operational transparency
+
+## 11. ⚙️ API Design Philosophy
+
+### Why split endpoints (`/estimate`, `/set`, `/revenue`)
+
+- Keeps intent explicit per financial operation
+- Avoids ambiguous payload contracts in a single polymorphic endpoint
+- Easier to validate and audit by action type
+
+### Upsert Behavior Reasoning
+
+- Allows core service orchestration without strict creation ordering
+- Reduces integration fragility when lifecycle steps happen in different sequences
+
+### REST Decisions
+
+- Resource-oriented paths and predictable HTTP verbs
+- Domain-aligned status code usage (`400/401/403/404/500`)
+- Internal-only API surface under `/api` namespace
+
+## 12. 🧱 Scalability & Performance Considerations
+
+Current workload characteristics:
+
+- Read-heavy summaries and expense listings for dashboards
+- Write operations concentrated on expense ingestion and sync updates
+
+Performance choices in current implementation:
+
+- `eventId` uniqueness supports direct lookup efficiency
+- Expense queries are ordered by `createdAt DESC` for recent-first views
+- DB connection retry logic improves startup robustness in container environments
+
+Near-term scaling strategy:
+
+- Add explicit indexes on frequently queried columns (`EventBudget.eventId`, `Expense.eventId`, `Expense.createdAt`)
+- Introduce connection pool tuning and query-level observability
+- Consider read replicas and async projection when traffic justifies complexity
+
+## 13. 📊 Observability & Monitoring
+
+Current baseline:
+
+- HTTP request logging via `morgan`
+- Health endpoint (`GET /health`) for readiness/liveness checks
+- Structured JSON error responses with consistent `message` field
+
+Next observability layer:
+
+- Centralized log aggregation (CloudWatch/ELK)
+- Metrics collection and dashboards (Prometheus/Grafana)
+- Distributed tracing for cross-service latency/failure analysis
+
+## 14. 🐳 Deployment & Infrastructure
+
+Container/runtime model:
+
+- Service runs on Node 20 (Dockerfile based on `node:20-alpine`)
+- Default service port: `8081`
+
+Networking model:
+
+- Intended for internal network communication with core backend
+- In Docker Compose, service-to-service calls should use container DNS names
+
+Operational startup behavior:
+
+- Startup retries database connectivity (`DB_RETRY_COUNT`, `DB_RETRY_DELAY_MS`)
+- Service exits if DB cannot be reached after retry budget
+
+## 15. 🛠️ Local Setup (Step-by-Step)
+
+1. Navigate to `budget-service/`.
+2. Create `.env` with required variables:
 
 ```env
 PORT=8081
@@ -458,24 +308,23 @@ DB_RETRY_COUNT=10
 DB_RETRY_DELAY_MS=3000
 ```
 
-### Run Locally
+3. Install dependencies:
 
 ```bash
 npm install
+```
+
+4. Start service in development mode:
+
+```bash
 npm run dev
 ```
 
-Or production mode:
+5. Verify health:
 
-```bash
-npm start
-```
+- `GET /health` should return `200` with `{ "status": "ok" }`
 
-Health check:
-
-- GET /health -> 200 {"status":"ok"}
-
-### Test Commands
+6. Run tests:
 
 ```bash
 npm test
@@ -483,46 +332,85 @@ npm run test:unit
 npm run test:integration
 ```
 
-### Docker Setup
+How environment variables are consumed:
 
-Build and run single service:
+- `dotenv` loads `.env` at startup in `src/app.js`
+- Database config reads `DB_*` variables in `src/config/database.js`
+- Server startup reads `PORT`, `DB_RETRY_COUNT`, and `DB_RETRY_DELAY_MS` in `src/server.js`
+- Auth middleware reads `INTERNAL_SERVICE_KEY` in `src/middleware/internalAuth.js`
 
-```bash
-docker build -t eventzen-budget-service .
-docker run --env-file .env -p 8081:8081 eventzen-budget-service
+## 16. 🚧 Limitations & Assumptions
+
+- `eventId` ownership is trusted from core backend; no direct cross-service referential validation
+- Shared key auth is simpler than mutual identity systems and requires secure secret handling
+- Expense create is not idempotent without caller coordination/idempotency keys
+- Synchronous integration favors consistency but can reduce end-to-end availability
+- `sequelize.sync({ alter: true })` is convenient for development but should be replaced by controlled migrations in strict production pipelines
+
+## 17. 🚀 Future Enhancements
+
+- Introduce migration-driven schema lifecycle (Sequelize migrations)
+- Add idempotency key support for mutation endpoints
+- Add async event-driven integration (outbox + message broker) for resilience
+- Add reconciliation jobs between core booking revenue and finance snapshots
+- Add mTLS/service identity and automated key rotation
+- Expand observability with SLOs, error budgets, and trace-based alerting
+
+## Service Folder Structure and Rationale
+
+```text
+budget-service/
+	src/
+		app.js                  # Express app wiring, middleware registration, route mounting
+		server.js               # Bootstrap, DB connect/retry, and HTTP server startup
+		config/
+			database.js           # Sequelize/PostgreSQL connection configuration
+		controllers/
+			budget.controller.js  # HTTP handlers for budget endpoints and input validation
+			expense.controller.js # HTTP handlers for expense endpoints and input validation
+		middleware/
+			internalAuth.js       # Internal service key authentication guard
+		models/
+			eventBudget.model.js  # Event-level finance aggregate model
+			expense.model.js      # Expense line-item model
+			index.js              # Model exports and Sequelize initialization glue
+		routes/
+			budget.routes.js      # Budget route definitions
+			expense.routes.js     # Expense route definitions
+		services/
+			budget.service.js     # Core domain logic, transactions, and calculations
+	tests/
+		unit/                   # Unit tests for controllers, middleware, and services
+		integration/            # End-to-end API behavior tests
+	coverage/                 # Jest/Istanbul generated coverage reports
+	Dockerfile                # Container image definition
+	package.json              # Scripts, dependencies, and test config
+	.env                      # Local runtime environment variables (not for commit)
 ```
 
-Run with full EventZen stack from repository root:
+Why this structure is followed:
 
-```bash
-docker compose up --build
-```
+- Keeps transport concerns (`routes/`, `controllers/`) separate from domain logic (`services/`).
+- Isolates persistence contracts in `models/` and connection concerns in `config/`.
+- Centralizes security boundary in `middleware/internalAuth.js` for all `/api` routes.
+- Improves testability by mirroring runtime layers in `tests/unit` and `tests/integration`.
 
-## 12. Tech Stack
+Tiny request lifecycle mapping:
 
-- Node.js (Express)
-- Sequelize ORM
-- PostgreSQL
-- REST APIs
-- Docker
-- Jest and Supertest for testing
-
-## 13. Future Enhancements
-
-- Async communication via Kafka or RabbitMQ for budget and revenue events.
-- Financial analytics features (burn rate, run-rate forecasting, variance trends).
-- Alerting for threshold breaches and budget overflow risk.
-- Idempotency keys for safer retries in distributed workflows.
-- Versioned API contracts for long-term integration stability.
-- Richer audit trails and immutable financial event logs.
+- Request enters route in `src/routes/*.routes.js`
+- Route dispatches to controller in `src/controllers/*.controller.js`
+- Controller validates/parses input and calls service in `src/services/budget.service.js`
+- Service executes domain logic and transactions using models in `src/models/*.model.js`
+- Response is returned by controller as JSON with domain-appropriate status codes
 
 ---
 
-## Quick Summary
+## Quick Architectural Summary
 
-This service is the financial source of truth for EventZen event economics:
+Budget Service is the financial source of truth for EventZen event economics:
 
-- Planning input: estimatedCost
-- Real spend source of truth: actualCost from expenses
-- External income input: revenue from booking sync
-- Decision metrics: remainingBudget and profit
+- Planning signal: `estimatedCost`
+- Budget control: `totalBudget`
+- Realized spend truth: `actualCost` from expenses
+- Revenue input: synchronized from core booking domain
+- Decision outputs: `remainingBudget` and `profit`

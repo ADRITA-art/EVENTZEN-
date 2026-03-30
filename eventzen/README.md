@@ -1,167 +1,207 @@
-# EventZen Backend
+# EventZen Core Backend (Spring Boot)
 
-A comprehensive Spring Boot backend for an event management platform.
+This document describes the **core Spring Boot service** of EventZen as a production-style backend system.
 
-## 1. Project Overview
+## 1. 🚀 Project Overview
 
-EventZen is a backend system for managing end-to-end event operations, from planning and venue scheduling to vendor assignment and ticket booking. It is designed for both real-world developer onboarding and academic evaluation with clear business rules, layered architecture, and secure API design.
+EventZen solves a common operational gap in event platforms: business operations (events, venues, vendors, bookings) are often tightly coupled with finance logic, making evolution and scaling difficult.
+
+The Spring Boot backend acts as the **central domain service** for EventZen and is responsible for:
+
+- Identity and access control (Admin/Customer)
+- Event lifecycle management
+- Venue and vendor management
+- Booking lifecycle and seat inventory control
+- Integration orchestration with the external Budget microservice
+
+Scope of this service:
+
+- Owns operational workflows and access policies
+- Exposes role-aware REST APIs consumed by the frontend
+- Delegates financial state to Budget Service through controlled internal integration
 
 Primary goals:
 
-- Manage users with role-aware access (Admin and Customer).
-- Manage events, including scheduling, venue assignment, capacity, and pricing.
-- Manage venues and vendors for event logistics.
-- Support ticket-based booking workflows with capacity enforcement.
-- Integrate with an external Budget Service microservice for estimated cost, expense tracking, and revenue synchronization.
+- Deliver secure role-based event operations for Admin and Customer personas
+- Preserve domain consistency for scheduling, booking, and seat inventory
+- Integrate financial tracking without coupling finance state into the core database
+- Maintain a backend structure that is easy to extend, test, and operate in production
 
-## 2. Architecture
+## 2. 🧠 System Architecture
 
-EventZen follows a classic layered architecture:
+### Why this architecture was chosen
 
-1. Controller Layer: Defines REST endpoints, input validation trigger points (`@Valid`), and role-based access via `@PreAuthorize`.
-2. Service Layer: Encapsulates business logic (time conflict checks, capacity rules, ticket availability, password changes, booking lifecycle, integration orchestration).
-3. Repository Layer: Uses Spring Data JPA repositories for persistence and query abstractions.
+The backend uses a **layered monolith architecture** because the core domain (events/bookings/users/venues/vendors) has tight transactional and policy coupling. This minimizes complexity while keeping boundaries explicit.
 
-### Technology and Data Access
+At the same time, finance is separated into a microservice due to different change velocity and fault domains.
 
-- Spring Boot 3 (web, validation, security)
-- Spring Data JPA + Hibernate ORM
-- MySQL as the primary transactional database
+In implementation terms, this is a **classic layered architecture** with strict separation of transport, domain logic, persistence, and external integration boundaries.
 
-### Microservice Integration (Budget Service)
+### Layered Architecture
 
-EventZen integrates with a separate Budget Service through REST calls using Spring `RestClient`.
+- Controller layer:
+  - HTTP contract, request validation trigger points (`@Valid`), endpoint role policy hooks (`@PreAuthorize`)
+- Service layer:
+  - Domain logic, invariants, orchestration, integration calls
+- Repository layer:
+  - JPA query abstraction and persistence access
 
-Integration capabilities:
+### Microservice Interaction: Event Service ↔ Budget Service
 
-- Upsert event estimated cost during event planning/vendor updates.
-- Set total budget for an event.
-- Fetch budget by event.
-- Add and delete expenses.
-- Sync event revenue based on confirmed bookings.
-- Readiness health dependency check for budget service availability.
+The Spring backend integrates with Budget Service via REST (`BudgetClient`), including:
 
-### Containerization
+- estimated cost upsert
+- total budget set
+- expenses fetch/add/delete
+- revenue sync
 
-- A Dockerfile is provided for backend image build and runtime.
-- Root-level Docker Compose orchestrates EventZen backend, MySQL, frontend, budget service, and budget database.
+Communication pattern:
 
-## 3. Features and Capabilities
+- Synchronous request-response for current implementation
+- Spring is the integration boundary exposed to frontend
+- Budget Service is treated as an internal dependency
 
-### Authentication and Authorization
+### Why Finance is a Separate Microservice
 
-- User registration and login with JWT issuance.
-- Role model: `ADMIN`, `CUSTOMER`.
-- Method-level security for privileged operations.
+- Different rate of change: budgeting and expense logic evolves independently from event operations
+- Financial data isolation: finance workflows can be constrained and audited separately
+- Independent scaling and failure boundaries for finance-heavy use cases
+- Prevents accidental coupling of financial rules into booking and event lifecycle code
 
-### Event Management
+## 3. 🧩 Core Features
 
-- Create, update, and cancel events.
-- Search events by date/location.
-- List upcoming events.
-- Venue-based event listing.
+### Identity and Access
 
-### Venue Management
+- Register and login with JWT issuance
+- Role model: `ADMIN`, `CUSTOMER`
+- Profile retrieval/update and password change
 
-- Create, update, delete venues (admin).
-- Active venue listing and filtered search by location/capacity.
+### Event Operations
 
-### Vendor Management
+- Create/update/cancel events
+- Search/list/upcoming events
+- Venue-scoped event retrieval
+- Event status visibility management (`ACTIVE`, `SOLD_OUT` for read APIs)
 
-- Create, update, soft-delete vendors (admin).
-- Role-aware listing (admins can view all; customers get active-only).
-- Attach and remove vendors per event with duplicate prevention.
+### Resource Management
 
-### Booking System
+- Venue CRUD and search
+- Vendor CRUD with soft-deactivation behavior
+- Event-vendor mapping management (attach/list/remove)
 
-- Ticket booking by customers.
-- Customer booking history.
-- Booking cancellation.
-- Admin booking oversight, status updates, and event booking summary.
+### Booking Operations
+
+- Customer booking creation and cancellation
+- Admin booking oversight and status updates
+- Per-event booking summary (capacity/booked/remaining)
+
+### Financial Integration via Proxy APIs
+
+- Admin budget endpoints under `/admin/budget/*`
+- Internal delegation to Budget Service
+- Real-time synchronization hooks on event, vendor, and booking lifecycle changes
 
 ### Operational and Platform Features
 
-- Readiness endpoint (`/readiness`) that reports Budget Service dependency health.
+- Readiness endpoint (`/readiness`) includes budget dependency health signal
 - Soft-delete semantics:
-  - Events are cancelled via status update (`CANCELLED`) instead of hard delete.
-  - Vendors are deactivated (`is_active=false`) instead of hard delete.
-- Role-aware data visibility:
-  - Vendor listing returns all vendors for admins, active-only vendors for customers.
-  - Event listing exposes only visible statuses (`ACTIVE`, `SOLD_OUT`).
-- Automatic lifecycle/status updates:
-  - Event moves between `ACTIVE` and `SOLD_OUT` based on ticket availability.
-  - Booking status transitions (`CONFIRMED`, `CANCELLED`) update seat inventory.
-- Cost/revenue synchronization with Budget Service on planning and booking changes.
-- CORS configuration through environment variables for frontend integration.
+  - events are cancelled by status transition instead of hard delete
+  - vendors are deactivated (`is_active=false`) instead of hard delete
+- Deterministic status transitions for event availability (`ACTIVE` <-> `SOLD_OUT`)
+- Centralized exception translation to consistent HTTP status behavior
 
-### Budget Integration
+## 4. 🔐 Security Design
 
-- Admin APIs to interact with budget and expense records.
-- Automatic revenue sync from confirmed bookings.
-- Automatic estimated cost sync from event and vendor changes.
+### Authentication and Authorization
 
-## 4. Security
-
-### Password Security
-
-- Passwords are encoded with BCrypt (`BCryptPasswordEncoder`).
-- Additional application-level salting is applied via `PasswordSecurityService`.
-- Legacy password migration support is implemented during login.
+- Stateless authentication using JWT
+- JWT filter (`OncePerRequestFilter`) validates token and populates security context
+- Public routes: `/auth/register`, `/auth/login`, `/readiness`
+- Route-level and method-level authorization with `@PreAuthorize`
+- Admin operations restricted to `hasRole('ADMIN')`
+- Customer booking operations restricted to `hasRole('CUSTOMER')`
+- All non-public endpoints require authentication
 
 ### JWT Authentication
 
-- Stateless authentication using JWT.
-- JWT filter (`OncePerRequestFilter`) validates token and populates security context.
-- Public routes: `/auth/register`, `/auth/login`, `/readiness`.
+- Stateless authentication model
+- JWT filter (`OncePerRequestFilter`) validates token and sets security context
+- Public endpoints constrained to auth and readiness
 
-### RBAC and Route Protection
+Why JWT:
 
-- Route-level and method-level authorization with `@PreAuthorize`.
-- Admin operations restricted to `hasRole('ADMIN')`.
-- Customer booking operations restricted to `hasRole('CUSTOMER')`.
-- All non-public endpoints require authentication.
+- Horizontal scalability without server-side session affinity
+- Standardized API auth model for SPA frontend
 
-## 5. Validations and Business Rules
+### RBAC (Role-Based Access Control)
+
+- Method-level role enforcement with `@PreAuthorize`
+- Admin-only mutation endpoints for protected resources
+- Customer-only booking actions for own lifecycle
+
+Why RBAC:
+
+- Explicit business authorization boundaries
+- Readable policy mapping from endpoint to role intent
+
+### Password Handling
+
+- BCrypt password hashing through Spring `PasswordEncoder`
+- Additional application-level salting via `PasswordSecurityService` (`auth.password.salt`)
+- Legacy password verification/migration path
+
+Why this choice:
+
+- BCrypt is adaptive and industry-standard for password storage
+- Salting increases resistance to precomputed hash attacks and supports controlled migration behavior
+- Migration logic supports backwards compatibility without forcing account resets
+
+## 5. ⚙️ Business Logic and Rules
 
 EventZen enforces validation at DTO, service, and persistence levels.
 
 ### Input Validation (DTO-level)
 
-- Required fields with `@NotNull` / `@NotBlank`.
-- Email format validation with `@Email`.
-- Numeric constraints such as `@Min` and `@DecimalMin`.
-- Size constraints for description/metadata fields.
+- Required fields with `@NotNull` / `@NotBlank`
+- Email format validation with `@Email`
+- Numeric constraints such as `@Min` and `@DecimalMin`
+- Size constraints for description/metadata fields
 
 ### Core Business Rules
 
-- Unique email for users:
-  - Enforced in business logic (`existsByEmail`) and DB unique column on `users.email`.
-- Event date/time consistency:
-  - `startTime` must be before `endTime`.
-- Venue availability conflict prevention:
-  - Overlapping active events at the same venue and timeslot are blocked.
-- Capacity constraints:
-  - Event max capacity cannot exceed venue capacity.
-  - Event max capacity cannot be reduced below already confirmed seats.
-- Booking limits:
-  - Seats per booking must be at least 1.
-  - Booking cannot exceed remaining capacity.
-  - Booking for ended events is rejected.
-- Vendor assignment rules:
-  - Duplicate vendor IDs in one attach request are rejected.
-  - Duplicate event-vendor mappings are blocked.
-  - Only active vendors can be attached to events.
-- Data integrity checks:
-  - Event status and ticket availability are synchronized when bookings/events change.
-  - Vendor-event relation has a DB uniqueness constraint on `(event_id, vendor_id)`.
+### Capacity and Scheduling Rules
 
-### Calculation and Derived-Field Rules
+- Event `startTime` must be before `endTime`
+- Event capacity cannot exceed selected venue capacity
+- Event capacity cannot be reduced below already confirmed booked seats
+- Venue overlap prevention for active events in same time window
 
-The backend performs several deterministic calculations to keep pricing and planning consistent.
+### Booking Lifecycle Rules
 
-#### 1) Venue Cost from Event Duration
+- Booking allowed only for `ACTIVE` events
+- Booking blocked for already-ended events
+- Seat availability validated before confirmation
+- Confirmed bookings decrement `ticketAvailable`
+- Cancellation or status reversal restores availability when applicable
+- Event transitions between `ACTIVE` and `SOLD_OUT` based on inventory
 
-- Formula:
+### Vendor Constraints
+
+- Duplicate vendor IDs in attach payload rejected
+- Duplicate event-vendor mapping rejected
+- Only active vendors allowed for attachment
+- Vendor mapping stores independent `purpose` + `cost`
+
+### Data Consistency Guarantees
+
+- Seat inventory and event status updated in step with booking mutations
+- Estimated cost recomputed/synced after event/vendor changes
+- Revenue recomputed/synced after booking state changes
+- Controlled exception mapping for invalid/duplicate/missing resources
+
+## 6. 🧮 Core Calculations
+
+### Venue Cost
 
 ```text
 durationMinutes = endTime - startTime
@@ -169,322 +209,227 @@ durationHours = durationMinutes / 60
 venueCost = venue.pricePerHour * durationHours
 ```
 
-- Implementation details:
-  - `durationHours` is computed with decimal precision.
-  - `venueCost` is rounded/scaled to 2 decimal places.
+Implementation notes:
 
-#### 2) Booking Price Calculation
+- decimal arithmetic with controlled rounding
+- computed at create/update event boundaries
 
-- Formula:
+### Booking Pricing
 
 ```text
 pricePerTicket = event.ticketPrice
 totalPrice = pricePerTicket * numberOfSeats
 ```
 
-- Both `pricePerTicket` and `totalPrice` are stored with 2-decimal precision.
+Implementation notes:
 
-#### 3) Event Total Planning Cost
+- price snapshot captured on booking record
+- supports auditability when ticket price changes later
 
-- Formula:
+### Planning Cost Aggregation
 
 ```text
-vendorCost = sum(cost of all vendors attached to event)
+vendorCost = sum(eventVendor.cost)
 totalCost = venueCost + vendorCost
 ```
 
-- This planning total is synced to Budget Service as estimated cost.
+- `totalCost` is synchronized as estimated cost to Budget Service
 
-#### 4) Ticket Availability Tracking
-
-- On event create/update:
+### Revenue Synchronization
 
 ```text
-ticketAvailable = maxCapacity - confirmedBookedSeats
+revenue = sum(booking.totalPrice where booking.status = CONFIRMED)
 ```
 
-- On booking confirmation/cancellation or admin status change:
+- recalculated and pushed on booking create/cancel/admin status transitions
 
-```text
-ticketAvailable = ticketAvailable - confirmedSeatDelta
-```
+## 7. 🔄 End-to-End Flows
 
-- If `ticketAvailable == 0`, event status becomes `SOLD_OUT`; otherwise `ACTIVE` (unless cancelled/completed).
+### Customer Journey (Summary)
 
-#### 5) Remaining Seats in Booking Summary
+1. Register/login -> receive JWT
+2. Browse events/venues/vendors
+3. Create booking
+4. Track/cancel own bookings
+5. Maintain own profile/password
 
-- Formula:
+### Admin Journey (Summary)
 
-```text
-totalBookedSeats = sum(numberOfSeats where booking status = CONFIRMED)
-remainingSeats = max(maxCapacity - totalBookedSeats, 0)
-```
+1. Login as admin
+2. Manage users/venues/vendors/events
+3. Attach vendors to events
+4. Monitor and update bookings
+5. Manage budget and expense workflows through Spring proxy APIs
 
-#### 6) Event Revenue Synchronization
+## 8. 🔌 API Design Philosophy
 
-- Formula:
+### REST Conventions
 
-```text
-revenue = sum(totalPrice where booking status = CONFIRMED)
-```
+- Resource-centric paths (`/events`, `/bookings`, `/venues`, etc.)
+- Clear role segregation using endpoint + method security
+- Domain operations represented as explicit sub-resources when needed
 
-- Revenue is pushed to Budget Service whenever booking state changes affect confirmed totals.
+### Status Code Strategy
 
-### Sequence Flow: Create Event -> Cost Calculation -> Budget Sync
+- `200/201` success
+- `400` validation/business input violations
+- `401/403` authentication/authorization failures
+- `404` missing resources/routes
+- `409` conflicts (duplicates/overlaps)
+- `503` downstream budget integration failures
 
-```mermaid
-sequenceDiagram
-  participant Admin
-  participant EventController
-  participant EventService
-  participant VenueRepository
-  participant EventRepository
-  participant BudgetClient
-  participant BudgetService
+### Idempotency Considerations
 
-  Admin->>EventController: POST /events (EventRequest)
-  EventController->>EventService: createEvent(request)
-  EventService->>VenueRepository: find venue by venueId
-  VenueRepository-->>EventService: Venue
-  EventService->>EventService: validate timing, overlap, capacity
-  EventService->>EventService: calculate venueCost from duration
-  EventService->>EventRepository: save event
-  EventRepository-->>EventService: saved Event
-  EventService->>EventService: compute totalCost = venueCost + vendorCost
-  EventService->>BudgetClient: upsertEstimatedCostForEvent(eventId, totalCost)
-  BudgetClient->>BudgetService: POST /api/budget/estimate
-  BudgetService-->>BudgetClient: 200 OK
-  BudgetClient-->>EventService: success
-  EventService-->>EventController: EventResponse
-  EventController-->>Admin: 200 OK
-```
+- `PUT` update operations are idempotent by intent
+- `DELETE` cancel/remove operations are deterministic with guard checks
+- Sync-style integration endpoints maintain eventual value overwrite semantics (e.g., revenue sync)
 
-### Assumptions and Constraints
+### Why These API Choices
 
-- Event timing assumes same-day start and end times (`startTime < endTime` on one `eventDate`).
-- Pricing assumes non-negative monetary values and 2-decimal financial precision.
-- `venue.pricePerHour` must exist to compute `venueCost`; missing value rejects event create/update.
-- Capacity constraints are strict: confirmed bookings are never allowed to exceed `maxCapacity`.
-- Event overlap checks are enforced for active scheduling at the same venue/time window.
-- Budget sync is treated as part of operational consistency; downstream failure returns integration error (`503`).
-- Visibility is role- and status-aware (for example customers only see active vendors and visible events).
+- Why resource-based URLs:
+  - Keeps API semantics aligned with domain nouns (`events`, `bookings`, `venues`) for maintainability and discoverability
+- Why role-based filtering/security over separate endpoint trees:
+  - Avoids duplicated controllers and DTO contracts while keeping authorization explicit at method boundary
+- Why REST over GraphQL (current phase):
+  - Predictable contract surface, simpler operational model, and lower complexity for current bounded domain and team size
 
-### Glossary of Domain Terms
+### Idempotency Risks and Mitigations
 
-- `venueCost`: Venue rental cost computed from venue hourly rate and event duration.
-- `vendorCost`: Sum of all vendor assignment costs linked to an event.
-- `totalCost`: Aggregate planning cost for an event (`venueCost + vendorCost`).
-- `revenue`: Sum of confirmed booking `totalPrice` values for an event.
-- `ticketAvailable`: Remaining sellable seats for an event after confirmed booking adjustments.
+- Revenue sync uses overwrite semantics, making retries safer for the same target state
+- Booking mutations are guarded by status/inventory checks to prevent invalid duplicate transitions
+- Remaining risk:
+  - network retries across service boundaries can still produce repeated intent submissions without caller-side safeguards
+- Future hardening:
+  - idempotency keys for mutation endpoints and distributed retry scenarios
 
-### Error Handling Approach
+## 9. 🗄️ Database Design
 
-- Centralized `@RestControllerAdvice` handles validation, domain, security, integration, and generic exceptions.
-- Proper HTTP status mapping (400, 401, 404, 409, 503, 500).
-
-## 6. API Documentation
-
-Base URL (local): `http://localhost:8080`
-
-Authentication header for protected routes:
-
-```http
-Authorization: Bearer <jwt-token>
-```
-
-### A. Admin APIs
-
-#### User Administration
-
-| Method | URL | Description |
-|---|---|---|
-| GET | `/admin/users` | List all users |
-| GET | `/users/{id}` | Get user by ID |
-| DELETE | `/users/{id}` | Delete user by ID |
-
-#### Event Administration
-
-| Method | URL | Description |
-|---|---|---|
-| POST | `/events` | Create event |
-| PUT | `/events/{id}` | Update event |
-| DELETE | `/events/{id}` | Cancel event |
-
-#### Venue Administration
-
-| Method | URL | Description |
-|---|---|---|
-| POST | `/venues` | Create venue |
-| PUT | `/venues/{id}` | Update venue |
-| DELETE | `/venues/{id}` | Delete venue |
-
-#### Vendor Administration
-
-| Method | URL | Description |
-|---|---|---|
-| POST | `/vendors` | Create vendor |
-| PUT | `/vendors/{id}` | Update vendor |
-| DELETE | `/vendors/{id}` | Soft-delete vendor |
-| POST | `/events/{eventId}/vendors` | Attach vendors to event |
-| DELETE | `/events/{eventId}/vendors/{vendorId}` | Remove vendor from event |
-
-#### Booking Administration
-
-| Method | URL | Description |
-|---|---|---|
-| GET | `/bookings` | List all bookings |
-| GET | `/bookings/event/{eventId}` | List bookings by event |
-| PUT | `/bookings/{id}/status` | Update booking status |
-| GET | `/bookings/event/{eventId}/summary` | Event booking summary |
-
-#### Budget Administration
-
-| Method | URL | Description |
-|---|---|---|
-| GET | `/admin/budget/event/{eventId}` | Fetch budget by event |
-| POST | `/admin/budget/set` | Set total budget for event |
-| GET | `/admin/budget/expense/event/{eventId}` | List expenses by event |
-| POST | `/admin/budget/expense` | Add expense |
-| DELETE | `/admin/budget/expense/{id}` | Delete expense |
-
-### B. User APIs
-
-| Method | URL | Description |
-|---|---|---|
-| POST | `/auth/register` | Register user |
-| POST | `/auth/login` | Login and receive JWT |
-| GET | `/auth/me` | Get current profile |
-| PUT | `/auth/change-password` | Change current password |
-| PUT | `/users/me` | Update own profile |
-| GET | `/events` | List visible events |
-| GET | `/events/{id}` | Get event by ID |
-| GET | `/events/search?date=YYYY-MM-DD&location=...` | Search events |
-| GET | `/events/upcoming` | List upcoming events |
-| GET | `/events/venue/{venueId}` | Events by venue |
-| GET | `/venues` | List active venues |
-| GET | `/venues/{id}` | Get venue by ID |
-| GET | `/venues/search?location=...&capacity=...` | Search venues |
-| GET | `/vendors` | List vendors (active-only for customers) |
-| GET | `/vendors/{id}` | Get vendor by ID (active-only for customers) |
-| GET | `/events/{eventId}/vendors` | List vendors assigned to event |
-| POST | `/bookings` | Book tickets (customer role) |
-| GET | `/bookings/my` | View own bookings |
-| DELETE | `/bookings/{id}` | Cancel own booking |
-
-### C. Integration APIs
-
-#### Exposed integration proxy (EventZen -> Budget Service)
-
-- `/admin/budget/*` endpoints listed above are EventZen-managed integration endpoints.
-
-#### Internal outbound calls from EventZen to Budget Service
-
-These are invoked through `BudgetClient`:
-
-| Method | Downstream URL (Budget Service) | Purpose |
-|---|---|---|
-| POST | `/api/budget/estimate` | Upsert estimated event cost |
-| POST | `/api/budget/set` | Set total budget |
-| POST | `/api/budget/revenue/{eventId}` | Sync event revenue |
-| GET | `/api/budget/{eventId}` | Fetch budget snapshot |
-| GET | `/api/expense/event/{eventId}` | Fetch expenses |
-| POST | `/api/expense` | Add expense |
-| DELETE | `/api/expense/{id}` | Delete expense |
-
-### Calculation-Critical APIs (Quick Reference)
-
-These endpoints directly trigger or depend on pricing/capacity calculations:
-
-| Method | URL | Calculation Impact |
-|---|---|---|
-| POST | `/events` | Computes `venueCost`, initializes ticket availability, syncs estimated cost |
-| PUT | `/events/{id}` | Recomputes `venueCost`, revalidates capacity, syncs estimated cost |
-| POST | `/events/{eventId}/vendors` | Recomputes vendor and total planning cost, syncs estimate |
-| DELETE | `/events/{eventId}/vendors/{vendorId}` | Recomputes planning cost, syncs estimate |
-| POST | `/bookings` | Computes booking `totalPrice`, updates inventory, syncs revenue |
-| DELETE | `/bookings/{id}` | Restores inventory for confirmed bookings, syncs revenue |
-| PUT | `/bookings/{id}/status` | Applies status transition inventory/revenue effects |
-| GET | `/bookings/event/{eventId}/summary` | Returns computed seat totals and remaining capacity |
-
-## 7. Database Design
-
-### Main Entities
+### Core Entities
 
 - `User`
-- `Event`
 - `Venue`
 - `Vendor`
+- `Event`
 - `Booking`
-- `EventVendor` (join entity for event-vendor assignments)
+- `EventVendor` (mapping entity)
 
-### Key Relationships
+### Relationships
 
-- One `Venue` can be used by many `Event` records (`Event` -> `Venue`: many-to-one).
-- One `User` can create many `Booking` records (`Booking` -> `User`: many-to-one).
-- One `Event` can have many `Booking` records (`Booking` -> `Event`: many-to-one).
-- `Event` and `Vendor` are many-to-many via `EventVendor`.
-- `EventVendor` enforces uniqueness on `(event_id, vendor_id)` to prevent duplicate assignments.
+- `Event` -> `Venue` (many-to-one)
+- `Booking` -> `User` (many-to-one)
+- `Booking` -> `Event` (many-to-one)
+- `EventVendor` links `Event` and `Vendor`
 
-## 8. Error Handling
+### Why `EventVendor` is a join entity (not direct many-to-many)
 
-### Global Exception Handling
+The mapping carries domain attributes (`purpose`, `cost`) and lifecycle semantics. A plain many-to-many would lose this modeling fidelity.
 
-Implemented using `@RestControllerAdvice` with dedicated handlers for:
+Benefits:
 
-- Validation errors (`MethodArgumentNotValidException`) -> `400 Bad Request`
-- Resource not found -> `404 Not Found`
-- Duplicate resource -> `409 Conflict`
-- Bad credentials -> `401 Unauthorized`
-- Budget integration failures -> `503 Service Unavailable`
-- Unexpected exceptions -> `500 Internal Server Error`
+- Stores per-assignment metadata
+- Enforces uniqueness (`event_id`, `vendor_id`)
+- Supports cost rollups and budget synchronization logic
 
-### Standard Response Patterns
+## 10. 🧱 System Design Considerations
 
-EventZen returns JSON error payloads with consistent key usage:
+### Scalability
 
-```json
-{
-  "error": "Descriptive message"
-}
-```
+- Stateless JWT architecture supports horizontal scaling
+- Clear domain boundaries allow extraction/evolution toward more services if required
 
-Validation errors return field-to-message maps:
+### Consistency
 
-```json
-{
-  "email": "Email must be valid",
-  "password": "size must be between 6 and 2147483647"
-}
-```
+- Core operational domain stays in one transactional backend
+- Critical invariants (capacity, overlap, booking status transitions) enforced in service layer
 
-## 9. Setup and Installation
+### Fault Tolerance (Budget Service Dependency)
+
+- Readiness endpoint checks budget service reachability
+- Integration exceptions are surfaced as `503 Service Unavailable`
+- Core service fails fast on financial sync failures to avoid silent divergence
+
+Trade-off:
+
+- Synchronous integration improves immediate consistency but increases runtime dependency coupling
+
+### Failure Handling Strategy
+
+- If Budget Service is unavailable:
+  - event and booking operations that require financial synchronization fail with `503`
+  - prevents silent financial divergence between core and budget domains
+- Trade-off:
+  - reduced availability in exchange for stronger cross-service consistency guarantees
+- Future improvement:
+  - retry queue and/or asynchronous fallback model for controlled degradation
+
+### Consistency Model
+
+- Strong consistency within core service transactions (users/events/bookings/vendors)
+- Eventual consistency across service boundaries (core domain ↔ budget domain)
+- Current control mechanism:
+  - synchronous integration calls to minimize drift windows
+- Future direction:
+  - asynchronous event-driven synchronization with reconciliation policies
+
+### Architectural Trade-offs
+
+- Synchronous vs asynchronous integration:
+  - Chosen: synchronous REST
+  - Benefit: immediate visibility of financial sync success/failure
+  - Trade-off: tight runtime dependency on Budget Service
+- Layered monolith vs full microservices for core domain:
+  - Chosen: layered monolith for event/booking/user/venue/vendor core
+  - Benefit: stronger transactional consistency and simpler operational overhead
+  - Trade-off: reduced independent scalability per sub-domain
+- JWT vs session-based authentication:
+  - Chosen: JWT
+  - Benefit: stateless horizontal scaling and frontend-friendly API auth
+  - Trade-off: token invalidation/revocation lifecycle is more complex than server-side sessions
+
+## 11. 🐳 Deployment and Infrastructure
+
+### Containerization
+
+- Backend ships with Dockerfile (multi-stage Maven build)
+- Root compose orchestrates full platform stack
+
+### Ports (Default)
+
+- Spring backend: `8080`
+- Frontend: `3000`
+- MySQL: `3306`
+- Budget service internal service port: `8081`
+
+### Inter-Service Communication
+
+- In Docker, backend reaches budget service by service DNS name (e.g., `budget-service`)
+- Integration base URL controlled via env/property configuration
+
+## 12. 🛠️ Local Setup Guide
 
 ### Prerequisites
 
 - Java 17+
 - Maven 3.9+
 - MySQL 8+
-- Docker and Docker Compose (optional, recommended for full stack)
 
-### Local Run (Backend only)
+### Backend Local Run (only Spring service)
 
-1. Clone repository and move to backend folder.
-2. Create `.env` in backend folder (copy from `.env.example`).
-3. Ensure MySQL database exists and credentials match environment variables.
-4. Build and run:
+1. Navigate to `eventzen/`
+2. Create `.env` from `.env.example`
+3. Ensure MySQL schema/user credentials exist
+4. Run:
 
 ```bash
 mvn clean install
 mvn spring-boot:run
 ```
 
-Application default port: `8080`
+### Environment Variables (`.env`) and How They Are Loaded
 
-### Environment Variables
+Recommended local `.env` (in `eventzen/`):
 
-At minimum configure:
-
-```env
+```properties
 SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/eventzen?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
 SPRING_DATASOURCE_USERNAME=eventzen
 SPRING_DATASOURCE_PASSWORD=YourStrongDBPassword
@@ -494,15 +439,65 @@ JWT_EXPIRATION=86400000
 
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 
-# Budget service integration
+# Budget integration (recommended to set explicitly)
 BUDGET_SERVICE_BASE_URL=http://localhost:4001
-INTERNAL_SERVICE_KEY=eventzen-internal-service-key-change-me
+INTERNAL_SERVICE_KEY=your-internal-service-key
 
-# Optional datasource startup timeout (ms)
+# Password hardening salt (change for non-dev use)
+PASSWORD_SALT=dev-static-salt-change-me
+
+# Optional Hikari tuning
 SPRING_TIMEOUT=1
+
+# Used by docker-compose db service
+MYSQL_ROOT_PASSWORD=YourStrongRootPassword
+MYSQL_DATABASE=eventzen
+MYSQL_USER=eventzen
+MYSQL_PASSWORD=YourStrongDBPassword
 ```
 
-### Docker Run (Full stack)
+How EventZen fetches values from `.env`:
+
+1. `spring.config.import=optional:file:.env[.properties]` in `src/main/resources/application.properties` loads `.env` from the backend working directory.
+2. Spring property placeholders map env variables into app properties, for example:
+  - `spring.datasource.url=${SPRING_DATASOURCE_URL}`
+  - `jwt.secret=${JWT_SECRET}`
+  - `budget.service.base-url=${BUDGET_SERVICE_BASE_URL:http://localhost:4001}`
+  - `budget.service.internal-key=${INTERNAL_SERVICE_KEY:present-in-env}`
+  - `auth.password.salt=${PASSWORD_SALT:dev-static-salt-change-me}`
+3. Beans then consume those properties via `@Value(...)`, e.g.:
+  - `SecurityConfig` reads CORS origins
+  - `JwtService` reads JWT secret and expiration
+  - `BudgetClient` reads budget base URL and internal service key
+  - `PasswordSecurityService` reads password salt
+
+Important behavior:
+
+- If a variable has a default (`${VAR:default}`), Spring uses the default when missing.
+- If no default is defined (for example `jwt.secret`), startup fails when missing.
+- Keep secrets out of version control; commit only `.env.example`.
+
+### Running Tests (Unit + Integration)
+
+From `eventzen/`:
+
+```bash
+# Run full test suite
+mvn test
+
+# Run only unit/controller/service style tests
+mvn -Dtest='*Test' test
+
+# Run integration-focused tests
+mvn -Dtest='*IntegrationTest' test
+```
+
+Note:
+
+- Integration test naming follows `*IntegrationTest` pattern in this codebase.
+- If using H2-based test profile, ensure test properties align with the documented SQL-init assumptions.
+
+### Full Stack via Docker Compose (recommended)
 
 From repository root:
 
@@ -510,39 +505,61 @@ From repository root:
 docker compose up --build
 ```
 
-Services include:
+## 13. 📊 Observability and Monitoring
 
-- EventZen backend (`8080`)
-- Frontend (`3000`)
-- MySQL (`3306`)
-- Budget Service and its PostgreSQL database
+Current observability features:
 
-## 10. Future Enhancements
+- Structured logging patterns for request and error traceability
+- Readiness endpoint (`/readiness`) includes Budget Service dependency health
+- Explicit exception-to-status mapping improves debuggability and operational triage
 
-- Event analytics dashboard (booking trends, occupancy, revenue insights).
-- Asynchronous integration/event updates via message broker (Kafka/RabbitMQ).
-- Caching and performance tuning for high-traffic reads.
-- API versioning and OpenAPI/Swagger generation.
-- Rate limiting and audit logging for security hardening.
-- Horizontal scaling with service discovery and centralized config.
-- Multi-tenant support for organizer-level isolation.
+To be integrated in future iterations:
 
-## 11. Tech Stack
+- Distributed tracing (OpenTelemetry)
+- Metrics dashboards (Prometheus/Grafana)
+- Centralized logs (ELK/CloudWatch)
 
-- Spring Boot 3.2
-- Spring Security (JWT + RBAC)
-- Spring Data JPA / Hibernate
-- MySQL
-- REST APIs
-- Docker / Docker Compose
-- Maven
+## 14. 🚧 Limitations and Assumptions
+
+- Event timing assumes same-date start/end windows
+- Synchronous budget calls can increase latency and dependency sensitivity
+- No asynchronous compensation workflow for downstream failures yet
+- Limited built-in telemetry/metrics in current baseline
+- API versioning strategy not yet formalized
+
+## 15. 🚀 Future Improvements
+
+- Async integration events (Kafka/RabbitMQ) for resilient cross-service synchronization
+- Distributed tracing and structured metrics dashboards
+- Rate limiting, audit trails, and security hardening layers
+- Advanced reporting and analytics projections
+- Service decomposition only where coupling metrics justify split
 
 ---
 
-## Quick Start Checklist
+## Spring Boot Folder Structure and Rationale
 
-1. Configure `.env` with DB/JWT/Budget values.
-2. Start MySQL (or run full stack with Docker Compose).
-3. Run backend using Maven.
-4. Register/login via `/auth/*` endpoints.
-5. Use JWT token for protected APIs.
+```text
+src/main/java/com/adrita/eventzen/
+  config/        # Security, application-level beans, infrastructure wiring
+  controller/    # REST controllers (HTTP boundary)
+  dto/           # Request/response contracts and validation models
+  entity/        # JPA entities and persistence mapping
+  exception/     # Centralized exception model and handlers
+  integration/   # External service clients (Budget Service boundary)
+  repository/    # Spring Data repositories
+  security/      # JWT filter/service and password security helpers
+  service/       # Domain/business logic
+  EventzenApplication.java
+
+src/main/resources/
+  application.properties
+  schema.sql
+```
+
+Why this structure is followed:
+
+- Enforces clean separation between transport, domain, persistence, and integration concerns
+- Improves testability (service logic isolated from controllers)
+- Keeps integration side effects explicit (`integration/` boundary)
+- Scales better for onboarding and code ownership in multi-developer teams

@@ -1,361 +1,382 @@
 # EventZen Frontend
 
-A production-style React frontend for the EventZen Event Management System.
+A production-grade React UI system for EventZen, designed for role-based operations, backend-driven workflows, and maintainable feature evolution.
 
-## 1. Project Overview
+## 1. 🚀 Project Overview
 
-EventZen Frontend is the UI layer of the platform, built with React and Vite. It provides role-aware user experiences for both customers and administrators, including event exploration, booking, vendor and venue administration, user management, and integrated budget operations.
+EventZen Frontend is the presentation and interaction layer of the EventZen platform. It enables customers and administrators to execute end-to-end workflows including event discovery, booking, event operations, venue/vendor administration, user management, and budget management tasks.
 
-System role:
+What the frontend does:
 
-- Renders all user-facing workflows (public landing/auth and authenticated modules).
-- Integrates with the Spring Boot backend via REST APIs.
-- Accesses budget functionality through backend proxy endpoints (`/admin/budget/*`) rather than calling the Budget microservice directly.
+- Delivers public product entry (`/`), authentication, and protected role-specific modules
+- Implements form validation and interaction feedback before backend submission
+- Coordinates data fetch, mutation, and refresh cycles for operational dashboards
 
-## 2. Architecture and Design
+Its role in the overall system:
 
-The frontend follows a component-oriented architecture with clear separation of concerns.
+- The frontend is the single user-facing client application
+- The Spring Boot backend is the authoritative API boundary
+- Budget features are consumed indirectly through Spring proxy endpoints, not by direct microservice calls
 
-### Architectural Layers
+Why this system role matters:
 
-- Pages layer (`src/pages`): Route-level screens (landing, auth, customer, admin).
-- Components layer (`src/components`): Reusable UI and feature widgets (modals, spinner, badges, floating header).
-- API layer (`src/api`): Axios-based service functions grouped by domain (`events`, `bookings`, `budget`, `venues`, `vendors`, `users`, `auth`).
-- State/context layer (`src/context`): Shared authentication/session state.
-- Router layer (`src/router`): Route protection and role-based access rules.
-- Utility layer (`src/utils`): Shared validation and input-normalization helpers.
+- Keeps frontend contracts stable even when internal backend topology evolves
+- Centralizes security and policy checks in backend services
+- Reduces credential exposure and cross-service coupling in the browser
 
-### UI Structure
+## 2. 🧠 Frontend Architecture & Design Rationale
 
-The app flow is organized as:
+### Why React + Vite
 
-Landing -> Authentication -> Role-specific dashboard layout -> Feature modules
+- React enables composable, reusable UI primitives across multiple role-based workflows
+- Vite provides fast development feedback and lean production builds
+- The combination supports rapid iteration without sacrificing modular architecture
 
-- Landing page acts as product entry and conversion surface.
-- Auth pages handle registration and login.
-- After login, navigation splits into Admin layout or Customer layout.
+### Why component-based architecture
 
-## 3. Routing and Navigation Flow (Very Important)
+- Shared UI patterns (modal, spinner, status badge, headers) avoid repeated implementation logic
+- Feature pages can compose reusable parts while preserving domain-specific behavior
+- UI consistency improves as design tokens and shared components converge
 
-### Routing Library
+### Why no heavy global state library (current design)
 
-- React Router (`react-router-dom`) with nested routes and guarded layout routes.
+- Current cross-cutting state is limited and mostly authentication-centric (`AuthContext`)
+- Most data is feature-local and server-sourced, making local state + API calls sufficient
+- Avoids over-engineering and boilerplate for current complexity level
 
-### Public Routes
+Trade-off:
 
-- `/` -> Landing page
-- `/login` -> Login page
-- `/register` -> Registration page
+- Context + local state is simpler now, but large future cross-page caching/workflow orchestration may justify Redux Toolkit or Zustand
 
-### Protected Routes
+### Separation of concerns
 
-Implemented protected routes are role-scoped:
+- Pages: route-level orchestration and screen composition
+- Components: reusable UI/feature primitives
+- API layer: HTTP contract boundary and endpoint grouping
+- Context: session/auth state shared across routes
+- Router: access control and role-aware navigation boundaries
 
-- Customer:
-	- `/events`
-	- `/my-bookings`
-	- `/profile`
-- Admin:
-	- `/admin` (redirects to `/admin/users`)
-	- `/admin/users`
-	- `/admin/venues`
-	- `/admin/vendors`
-	- `/admin/events`
-	- `/admin/bookings`
-	- `/admin/profile`
+## 3. 🧩 Application Structure
 
-Budget UI is integrated inside admin event workflows (`/admin/events`) via modal actions, not as a standalone top-level route.
+Application layers:
 
-Requested route mapping (conceptual -> implemented):
+- Pages layer (`src/pages`): feature screens for public, auth, customer, and admin workflows
+- Components layer (`src/components`): reusable UI units and focused feature widgets
+- API layer (`src/api`): centralized Axios instance plus domain-grouped API functions
+- Context layer (`src/context`): authentication/session lifecycle and shared role state
+- Router layer (`src/router`): route guards and role-based access enforcement
+- Utilities layer (`src/utils`): validation and input normalization primitives
 
-- `/dashboard` -> role dashboard entry points:
-	- admin: `/admin` (redirects to `/admin/users`)
-	- customer: `/events`
-- `/vendors` -> admin vendor module at `/admin/vendors`
-- `/bookings` ->
-	- admin bookings at `/admin/bookings`
-	- customer bookings at `/my-bookings`
-- budget module -> integrated in `/admin/events` via Budget modal actions
+Why this structure was chosen:
 
-### Role-Based Navigation
+- Enables clear ownership boundaries per concern
+- Improves onboarding by making execution flow predictable
+- Keeps HTTP and auth behavior centralized rather than duplicated in pages
+- Supports incremental feature growth without deep refactors
 
-- Login redirects admins to `/admin/users` and customers to `/events`.
-- Admin and customer use different layouts (`AdminLayout`, `CustomerLayout`) with role-specific navigation menus.
+## 4. 🔀 Routing & Navigation Design
 
-### Route Protection Logic
+### Public routes
 
-- `ProtectedRoute` reads auth state from `AuthContext`.
-- If auth state is loading, a spinner is shown.
-- Unauthenticated users are redirected to `/login`.
-- Users with wrong role are redirected to their permitted area.
+- `/` -> landing page
+- `/login` -> login
+- `/register` -> registration
 
-### Navigation Sequence
+### Protected routes
 
-Typical flow:
+- Customer routes under `CustomerLayout`:
+  - `/events`
+  - `/my-bookings`
+  - `/profile`
+- Admin routes under `AdminLayout`:
+  - `/admin` (redirects to `/admin/users`)
+  - `/admin/users`
+  - `/admin/venues`
+  - `/admin/vendors`
+  - `/admin/events`
+  - `/admin/bookings`
+  - `/admin/profile`
 
-Landing -> Login/Register -> Auth check -> Role layout -> Modules (events/vendors/bookings/budget via events modal)
+### Role-based routing
 
-## 4. API Integration
+- `ProtectedRoute` gates access based on `allowedRoles`
+- Unauthenticated users are redirected to `/login`
+- Authenticated users with wrong role are redirected to their valid home area
 
-### Backend Communication Model
+### Layout separation
 
-- All frontend API calls are made to Spring Boot REST endpoints.
-- Axios is used through a centralized instance (`src/api/axiosInstance.js`).
-- Base URL is configured from `VITE_API_URL` with fallback `http://localhost:8080`.
+- `AdminLayout` and `CustomerLayout` isolate navigation, IA, and workflow emphasis per persona
+- This prevents role leakage in navigation and keeps mental models focused
 
-### Auth and Interceptors
+### Navigation flow
 
-- JWT token is read from localStorage and attached as `Authorization: Bearer <token>` for non-public endpoints.
-- On `401`, token and role are cleared and user is redirected to `/login`.
+Landing -> Auth -> Session restore/check -> Role-specific layout -> Feature modules.
 
-### Budget Proxy Integration
+Budget actions are embedded inside admin event workflows (`/admin/events`) via modal-driven interactions.
 
-- Budget operations use Spring proxy endpoints:
-	- `GET /admin/budget/event/:eventId`
-	- `POST /admin/budget/set`
-	- `GET /admin/budget/expense/event/:eventId`
-	- `POST /admin/budget/expense`
-	- `DELETE /admin/budget/expense/:id`
+## 5. 🔗 Backend Integration Strategy
 
-Frontend never directly calls the budget microservice host.
+### Axios setup
 
-### API Usage Examples
+- All HTTP calls use a centralized Axios client (`src/api/axiosInstance.js`)
+- Base URL is controlled by `VITE_API_URL` with localhost fallback
+- Shared JSON headers and interceptors are applied in one place
 
-Fetch events:
+### JWT handling
 
-```js
-import { getUpcomingEvents } from './src/api/events';
+- Token and role are persisted in `localStorage`
+- Request interceptor attaches `Authorization: Bearer <token>` to non-public routes
+- `AuthContext` rehydrates session and calls `/auth/me` for runtime validation
 
-const response = await getUpcomingEvents();
-const events = response.data;
-```
+### Interceptor behavior
 
-Create booking:
+- Public auth endpoints are excluded from token injection
+- On `401`, session keys are cleared and user is redirected to `/login`
 
-```js
-import { createBooking } from './src/api/bookings';
+### Why frontend does not call Budget Service directly
 
-await createBooking(eventId, numberOfSeats);
-```
+- Browser never handles internal service key trust model
+- Spring backend is the orchestration and policy boundary
+- Frontend stays aligned with stable domain endpoints while backend integration details remain encapsulated
 
-Add expense via backend proxy:
+### Error handling strategy
 
-```js
-import { addExpense } from './src/api/budget';
+- API errors are surfaced with backend message fallback (`response.data.message`)
+- Feature-level handlers map failures to user-readable inline feedback
+- Request retries are intentionally conservative in UI to avoid duplicate write side effects
 
-await addExpense({
-	eventId,
-	description: 'Catering payment',
-	amount: 2500,
-});
-```
+## 6. 🧠 State Management Strategy
 
-## 5. State Management
+### Local state
 
-### Local State
+- `useState` manages form fields, modals, loading flags, and feature messages
+- Keeps volatile UI state close to consuming components
 
-Local component state is handled with hooks:
+### Global/shared state
 
-- `useState` for form values, modal visibility, loading flags, and inline messages.
-- `useEffect` for initial and dependent data fetching.
+- `AuthContext` holds `user`, `role`, and `loading`
+- Exposes `login`, `logout`, and `refreshUser`
+- Provides app-wide auth state without introducing heavy store architecture
 
-### Global/Shared State
+### Why Context API here
 
-- `AuthContext` stores `user`, `role`, and `loading` state.
-- Exposes `login`, `logout`, and `refreshUser` actions.
-- Restores session from localStorage (`token`, `role`) and validates user with `/auth/me` on app start.
+- Shared auth state is global but low-volume
+- Context provides enough capability with low overhead
+- Reduces complexity and onboarding cost for current project size
 
-### Data Flow Pattern
+### Trade-offs vs Redux/Zustand
 
-REST API -> transformed/validated state -> UI rendering
+- Context is simpler but has fewer built-in patterns for complex async caching and granular subscriptions
+- Redux/Zustand can scale better for very large state graphs, but adds configuration and cognitive overhead
 
-Examples:
+### Data flow model
 
-- Events list fetch -> `events` state -> card/table rendering.
-- Booking creation -> success callback -> state refresh -> updated availability.
-- Budget modal operations -> proxy calls -> budget/expense state refresh -> recalculated UI widgets.
+UI action -> validation -> API call -> state update -> UI re-render.
 
-### Form and Modal State
+This explicit, unidirectional flow helps maintain predictability during mutation-heavy admin operations.
 
-- Forms use controlled inputs.
-- Modals maintain isolated state (`modal`, `vendorModal`, `budgetModal`) for workflow clarity.
+## 7. 🧾 Form Handling & Validation Strategy
 
-## 6. Form Handling and Validations (Critical)
+Validation philosophy:
 
-Validation is implemented client-side using shared helpers in `src/utils/validation.js` plus route-level form checks.
+- Prevent invalid backend calls early at the UI boundary
+- Show users actionable feedback before network round-trips
 
-### Validation Rules in Practice
+Validation coverage:
 
-- Required text fields:
-	- event name, city/state/country, vendor contact details, expense description, etc.
-- Email format validation:
-	- login/register/vendor email fields.
-- Password constraints:
-	- minimum 6 chars, at least one letter and one number.
-- Numeric validations:
-	- ticket price >= 0
-	- vendor/venue/budget amounts >= 0
-	- expense amount > 0
-	- seats and capacities as positive integers
-- Negative value prevention:
-	- budget, ticket, and cost inputs are blocked when invalid.
-- Time/date validation:
-	- valid ISO date checks and `startTime < endTime` enforcement.
+- Required text validation for critical fields
+- Email and password format checks
+- Numeric constraints (`>= 0`, `> 0`, positive integers)
+- Date/time sanity checks (`startTime < endTime`)
+- Input normalization (`trim`, lowercase email handling)
 
-### Input Sanitization
+UX decisions behind validation:
 
-- Text input normalization via trimming (`toTrimmed`).
-- Email normalization to lowercase for auth and vendor forms.
+- Inline feedback is preferred over delayed failure after submit
+- Guard clauses stop invalid submissions immediately
+- Consistent helper utilities keep rules uniform across forms
 
-### Error Rendering
+## 8. ⚠️ Error Handling & UX Feedback
 
-- Validation failures surface as inline message banners and field-contextual prompts before API submission.
+Error handling patterns:
 
-## 7. Error and Success Feedback
+- Per-action try/catch with contextual messages
+- Backend error passthrough when available, safe fallback text otherwise
+- Guarded data fetching patterns for partial failures in budget workflows
 
-Feedback is displayed inline using contextual alert cards (not toast library).
+Success feedback patterns:
 
-### Error Handling Patterns
+- Explicit success states after create/update/delete operations
+- Immediate refresh of dependent data (for example budget summary after expense mutation)
 
-- Backend error payload parsing (`response.data.message` fallback patterns).
-- Human-readable fallback messages for unknown errors.
+Loading states:
 
-### Success Feedback Examples
+- Route-level loading indicator for auth-protected routing
+- Page-level loading for initial module fetches
+- Action-level loading/disabled controls during mutations
 
-- Event create/update/cancel success banners.
-- Booking cancellation and confirmation flow updates.
-- Vendor/venue/user CRUD success messages.
-- Budget updates and expense operations reflected immediately in modal summaries.
+Why this improves UX:
 
-### Loading States
+- Reduces uncertainty during asynchronous operations
+- Prevents duplicate submissions while requests are in-flight
+- Makes failure states diagnosable without exposing raw technical errors
 
-- Dedicated spinner component for page and route loading.
-- Action-level loading states (`Saving...`, `Booking...`, `Cancelling...`).
-- Disabled buttons during in-flight operations.
+## 9. 🎨 UI/UX Design System
 
-## 8. UI/UX Design
+Design consistency approach:
 
-### Design Characteristics
+- Shared styling tokens and utility classes keep visual language coherent
+- Reusable components enforce consistent interaction patterns
+- Role-specific layouts maintain contextual focus for admin vs customer journeys
 
-- Clean, modern visual language with CSS variables and consistent branding.
-- Responsive behavior for desktop and mobile layouts.
-- Role-specific navigation UIs for admin and customer journeys.
+Reusable components with architectural value:
 
-### Styling System
+- `Modal`: encapsulates focused workflows without route fragmentation
+- `Spinner`: consistent loading affordance across screens
+- `StatusBadge`: standardized status semantics
+- `FloatingHeader`: reusable branded navigation shell element
 
-- Tailwind CSS plugin is enabled, with a strong custom CSS layer in `index.css`.
-- Reusable design tokens:
-	- primary/secondary colors
-	- surface/background tokens
-	- shared controls (`btn-primary`, `btn-secondary`, `btn-danger`, `input-field`, `card`)
+Tailwind usage
 
-### Reusable UI Components
+- Tailwind is enabled and complemented with a custom CSS layer for app-level tokens/components
+- This hybrid approach balances rapid styling with project-specific UI consistency
 
-- `Modal` for focused workflows.
-- `Spinner` for loading feedback.
-- `StatusBadge` for consistent status visualization.
-- `FloatingHeader` for branded landing navigation.
+Why modals are used:
 
-### Interaction Patterns
+- Budget and assignment tasks are contextual to parent records (events)
+- Modal interactions preserve page context and reduce navigation overhead
+- Faster operator workflow for admin-heavy operations
 
-- Modals for booking, vendor assignment, and budget management.
-- Hover states and micro-interactions on cards/buttons/rows.
-- Interactive landing accordion driven by feature JSON data.
+## 10. ⚙️ API Design Consumption Philosophy
 
-## 9. Key Features
+How frontend consumes REST APIs:
 
-- Interactive landing page with branded feature accordion.
-- Authentication (register/login) with role selection and guarded access.
-- Customer event discovery, search, booking, and booking management.
-- Admin event lifecycle management (create/edit/cancel).
-- Admin venue, vendor, and user management modules.
-- Admin booking monitoring and status updates with summary modal.
-- Budget tracking UI integrated inside admin event workflows.
+- API functions are grouped by domain (`events`, `bookings`, `budget`, `users`, `venues`, `vendors`, `auth`)
+- Components call semantic API helpers rather than embedding raw endpoint strings
 
-## 10. Folder Structure
+Why centralized API layer:
+
+- One location for transport concerns (base URL, interceptors, headers)
+- Lower duplication and easier contract maintenance
+- Faster adaptation if backend endpoint patterns evolve
+
+Why domain separation in API modules:
+
+- Aligns frontend boundaries with business capabilities
+- Improves discoverability for onboarding developers
+- Supports testability and incremental refactoring per domain
+
+## 11. 🧱 Performance & Scalability Considerations
+
+Current performance posture:
+
+- Role/layout partitioning and local state scoping limit unnecessary global updates
+- API modules reduce repeated network logic and header setup overhead
+- Async handlers refresh only affected slices of data after mutations
+
+Current constraints:
+
+- No route-level code splitting/lazy loading yet
+- No dedicated client-side cache layer (for example React Query)
+
+Future scaling path:
+
+- Add lazy loading for larger route bundles
+- Introduce memoization/selective rendering for heavy tables and forms
+- Add request caching/deduplication for repeated reads
+- Introduce background refresh and stale-while-revalidate patterns
+
+## 12. 🔐 Security Considerations
+
+Token storage trade-off:
+
+- Current implementation uses `localStorage` for JWT persistence and simple session restore
+- Benefit: implementation simplicity and predictable SPA behavior
+- Trade-off: higher XSS exposure risk compared with HttpOnly secure cookies
+
+Route protection:
+
+- Protected routes enforce authentication + role checks at navigation boundary
+- Unauthorized users are redirected out of restricted areas
+
+API protection assumptions:
+
+- Frontend assumes backend enforces full authorization checks server-side
+- Budget microservice remains inaccessible directly from browser by design
+- Frontend-side checks are usability controls, not security substitutes
+
+## 13. 📁 Folder Structure
 
 ```text
 src/
-	api/            # Axios instance and domain API functions
-	components/     # Reusable UI and feature components
-		customer/
-		ui/
-	context/        # Shared app state (AuthContext)
-	layouts/        # Role-specific layout shells (Admin/Customer)
-	pages/          # Route-level screens
-		admin/
-		auth/
-		customer/
-	router/         # Route guards (ProtectedRoute)
-	utils/          # Validation and shared helpers
-	App.jsx         # Route tree + app composition
-	main.jsx        # React app bootstrap
+  api/            # Axios instance + domain API modules
+  components/     # Reusable UI components and feature widgets
+  context/        # Shared auth/session state
+  layouts/        # Admin/Customer layout shells
+  pages/          # Route-level screens by role/domain
+  router/         # Route guard logic
+  utils/          # Validation and small shared helpers
+  App.jsx         # Route tree and app composition
+  main.jsx        # Application bootstrap
 ```
 
-Notes:
+Why this structure works well:
 
-- The API directory functions as the frontend service layer.
-- Modules are grouped by business domain for maintainability.
+- Keeps transport, view composition, and state concerns decoupled
+- Makes request flow traceable: route -> page -> API module -> backend
+- Improves onboarding by reflecting architectural layers in directory layout
+- Scales by domain rather than by file-type sprawl inside single folders
 
-## 11. Setup and Installation
+## 14. 🛠️ Setup & Running the App
 
-### Prerequisites
+Prerequisites:
 
 - Node.js 18+ (Node 20 recommended)
-- npm (or yarn/pnpm equivalent)
+- npm
 
-### Install
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-### Environment Variables
-
-Create `.env` (or copy from `.env.example`):
+Configure environment:
 
 ```env
 VITE_API_URL=http://localhost:8080
 ```
 
-### Run Development Server
+Run development server:
 
 ```bash
 npm run dev
 ```
 
-### Production Build and Preview
+Create production build:
 
 ```bash
 npm run build
+```
+
+Preview production build locally:
+
+```bash
 npm run preview
 ```
 
-## 12. Tech Stack
+## 16. 🚧 Limitations & Assumptions
 
-- React 19
-- React Router DOM 7
-- Axios
-- Vite
-- Tailwind CSS (with custom CSS utility/design system)
-- Lucide React icons
-- ESLint for linting
+- Auth persistence currently relies on `localStorage` and assumes strong XSS hygiene
+- Frontend does not implement offline mode or optimistic reconciliation for failed writes
+- Budget UX is embedded in admin events page, not a standalone analytics workspace
+- No route-level lazy loading yet; bundle growth may affect initial load at larger scale
+- Advanced client-side caching and request deduplication are not yet implemented
 
-## 13. Future Enhancements
+## 17. 🚀 Future Improvements
 
-- Introduce advanced state management for large-scale flows (Redux Toolkit or Zustand).
-- Add caching and request deduplication (React Query/TanStack Query).
-- Improve accessibility (ARIA semantics, keyboard navigation depth, contrast audits).
-- Add richer motion/animation patterns with performance guardrails.
-- Strengthen offline/error resiliency with retry and optimistic UI strategies.
-
----
-
-## Evaluation Notes
-
-This frontend is built for both practical developer onboarding and academic assessment:
-
-- Clear separation between route pages, reusable components, API services, and shared state.
-- Explicit role-based navigation and auth guard behavior.
-- Real integration path through Spring backend, including budget proxy model.
-- Strong client-side validation and user feedback patterns across modules.
+- Introduce route-based code splitting with lazy loading and suspense boundaries
+- Add query caching and invalidation strategy (for example TanStack Query)
+- Implement stronger frontend security posture with CSP hardening and token strategy review
+- Add accessibility hardening (keyboard flows, ARIA audit, contrast testing)
+- Add performance telemetry (web vitals + route timing) and regression thresholds in CI
+- Introduce richer budget insights UI if finance workflows expand beyond modal scope

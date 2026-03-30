@@ -1,296 +1,344 @@
 # EventZen: Full-Stack Event Management Platform
 
-EventZen is a full-stack event management platform built with a hybrid architecture: a Spring Boot core backend plus an independent budget tracking microservice, served through a React frontend.
+EventZen is a full-stack, role-aware event management platform that combines a Spring Boot core backend, a dedicated budget tracking microservice, and a React frontend.
 
-## 1. Project Overview
+## 1. 🚀 Project Overview
 
-EventZen is designed to support complete event operations across planning, execution, and financial tracking.
+EventZen solves a common platform problem: operational event workflows (users, venues, vendors, bookings) and financial workflows (budget, expenses, profitability) evolve at different speeds but still need controlled integration.
 
-Core system purpose:
+What EventZen provides:
 
-- Manage users with role-based access (Admin and Customer)
-- Manage venues and vendors
-- Create, update, and monitor events
-- Handle ticket bookings and booking administration
-- Track event budgets, expenses, revenue, and profitability
+- End-to-end event operations for Admin and Customer personas
+- Booking lifecycle and event availability handling
+- Financial tracking through a dedicated budget domain service
+- Containerized local execution for full-system testing
 
-This is a full-stack application with microservices:
+High-level system idea:
 
-- Frontend: React application for all user interactions
-- Core backend: Spring Boot service for primary domain logic
-- Budget microservice: separate service for finance and cost tracking
+- Frontend provides all user interactions
+- Spring Boot backend is the primary domain and security boundary
+- Budget microservice owns finance-specific state and calculations
 
-## 2. System Architecture (Very Important)
+## 2. 🧠 System Architecture
 
-### Main Components
+### Core components
 
-- Frontend (React + Vite)
-  - Provides landing, authentication, customer modules, and admin modules
-  - Calls Spring Boot APIs only
-
-- Core Backend (Spring Boot)
-  - Handles authentication, authorization, users, venues, vendors, events, bookings
-  - Uses layered architecture: Controller -> Service -> Repository
-  - Integrates with budget microservice through internal REST calls
-
-- Budget Microservice (Node.js + Express)
-  - Handles financial state: budget, estimated cost, actual cost, expenses, revenue
-  - Internal-only API protected with an internal service key
+- Frontend (`frontend`): React + Vite client, role-based routing and UI workflows
+- Core backend (`eventzen`): Spring Boot API for auth, users, venues, vendors, events, bookings, and budget orchestration
+- Budget service (`budget-service`): Node.js + Express service for finance data (`estimatedCost`, `totalBudget`, `actualCost`, `revenue`, expenses)
 
 ### Databases
 
-- MySQL: used by Spring Boot core backend
-- PostgreSQL: used by budget microservice
+- MySQL: core backend operational data
+- PostgreSQL: budget service financial data
 
-### Architectural Patterns
-
-- Layered architecture in core backend:
-  - Controller: API endpoints and request validation boundaries
-  - Service: business rules and orchestration
-  - Repository: persistence and query access
-
-- Microservice separation:
-  - Budget service is independent of the core backend implementation
-  - Budget logic is isolated from event/booking domain logic
-
-- Database-per-service pattern:
-  - Each service owns its own database
-  - No cross-service foreign keys
-
-### High-Level Flow
+### High-level flow
 
 ```text
 Frontend -> Spring Boot -> MySQL
 Frontend -> Spring Boot -> Budget Service -> PostgreSQL
 ```
 
-## 3. Microservices Design
+### Why this architecture was chosen
 
-EventZen uses a hybrid architecture: modular monolith (Spring Boot core) + focused microservice (Budget Service).
+- Strong transactional consistency for core operational domain in one backend
+- Clear microservice boundary for financial logic and data ownership
+- Reduced accidental coupling between booking logic and budget correctness
+- Better long-term scalability and team ownership separation
 
-Why this approach is used:
+## 3. 🧩 Microservices Design
 
-- Separation of concerns:
-  - Core backend focuses on operational workflows
-  - Budget service focuses on financial tracking and derived metrics
-- Scalability:
-  - Budget service can scale independently based on financial workload
-- Maintainability:
-  - Finance-specific logic is contained in a dedicated service boundary
-- Deployment flexibility:
-  - Services can evolve independently while preserving integration contracts
+### Why budget is separate
 
-Budget service responsibilities:
+- Finance has a different change cadence than event operations
+- Financial calculations and expense consistency require focused domain ownership
+- Isolated failure domain for finance-related operations
 
-- Upsert estimated event costs
-- Set total budget limits
-- Record and manage expenses
-- Maintain actual cost consistency
-- Sync revenue updates from booking outcomes
-- Return financial summaries (remaining budget, profit)
+### Database-per-service
 
-## 4. Inter-Service Communication
+- Core backend owns MySQL schema
+- Budget service owns PostgreSQL schema
+- No shared tables between services
 
-### Communication Model
+### Loose coupling via `eventId`
 
-- REST-based communication between Spring Boot and budget service
-- Frontend does not call budget service directly
-- Spring Boot acts as the API gateway/proxy for budget operations
+- Budget service references events by `eventId` from core backend
+- No cross-service foreign keys are used
+- Integration stays contract-driven instead of DB-coupled
 
-### Core Integration Flows
+## 4. 🔗 Inter-Service Communication
 
-- Event creation/update:
-  - Spring computes planning totals
-  - Spring calls budget service to upsert estimated cost
+### Communication model
 
-- Vendor assignment updates:
-  - Spring recalculates estimated planning cost
-  - Budget service receives updated estimate
+- REST calls between Spring Boot and Budget Service
+- Frontend calls Spring APIs only
+- Budget APIs are internal and protected by internal service key middleware
 
-- Expense addition/removal:
-  - Admin action in frontend goes to Spring
-  - Spring forwards to budget service
-  - Budget service updates expenses and actual cost transactionally
+### Why frontend does not call budget service directly
 
-- Booking confirmation/cancellation changes:
-  - Spring computes revenue from confirmed bookings
-  - Spring syncs revenue into budget service
+- Prevents exposing internal service authorization semantics to browsers
+- Keeps policy and business orchestration centralized in Spring backend
+- Simplifies frontend contracts and reduces coupling
 
-### Docker Networking Note
+### Sync vs async trade-offs
 
-In containerized runs, services communicate via Docker service names (internal network DNS), not hardcoded localhost assumptions between containers.
+- Current choice: synchronous REST
+- Benefit: immediate success/failure feedback and tighter consistency at mutation time
+- Trade-off: runtime dependency on budget service availability
+- Future path: async messaging for resilience and retry buffering
 
-Example internal names in compose:
+## 5. 📊 Data Flow (Very Important)
 
-- `backend`
-- `budget-service`
-- `db` (MySQL)
-- `budget-db` (PostgreSQL)
-
-## 5. Features Overview
-
-### Frontend Features
-
-- Interactive landing page and onboarding flow
-- Login/register and role-aware navigation
-- Customer modules: browse/search events, book tickets, manage bookings
-- Admin modules: users, venues, vendors, events, bookings
-- Integrated budget UI inside admin event workflows
-
-### Core Backend Features
-
-- JWT-based auth and role-protected endpoints
-- User lifecycle and profile management
-- Venue and vendor management
-- Event creation/update/cancellation with scheduling/capacity rules
-- Booking creation/cancellation and admin booking status controls
-- Budget proxy endpoints for admin financial workflows
-
-### Budget Microservice Features
-
-- Event budget setup and updates
-- Expense tracking and actual-cost maintenance
-- Revenue synchronization from core backend
-- Financial summary metrics:
-  - totalBudget
-  - estimatedCost
-  - actualCost
-  - remainingBudget
-  - profit
-
-## 6. Security
-
-Security is enforced at multiple layers.
-
-- JWT-based authentication in Spring Boot
-- Password hashing using BCrypt in core backend
-- Role-based access control:
-  - Admin and Customer route/API separation
-- Protected backend routes with method-level authorization
-- Internal service protection for budget microservice:
-  - Budget endpoints require internal service authorization key
-  - Budget service is not designed for direct public/frontend access
-
-## 7. Data Flow (Important)
-
-### Primary Application Data Flow
+### Operational flow
 
 ```text
 User -> Frontend -> Spring Boot -> MySQL
 ```
 
-### Financial Data Flow
+### Financial flow
 
 ```text
-Spring Boot -> Budget Service -> PostgreSQL
+Admin action -> Frontend -> Spring Boot -> Budget Service -> PostgreSQL
 ```
 
-### Responsibility Separation
+### Responsibility separation
 
-- Frontend handles presentation, UX state, and client-side validation
-- Spring Boot owns operational domain workflows and access control
-- Budget service owns finance calculations and expense consistency
+- Frontend: presentation, role-aware UX, input validation
+- Spring backend: auth, RBAC, operational rules, orchestration
+- Budget service: financial aggregates, expense transactions, profitability outputs
 
-Key design decision:
+## 6. 🔐 Security Overview
 
-- No direct frontend -> budget microservice calls
+- JWT authentication in Spring backend for user sessions
+- RBAC enforcement (Admin vs Customer) via backend authorization rules
+- Internal service key required for budget service `/api/*` routes
+- Budget service is intentionally protected from direct public/frontend access
 
-## 8. Docker and Deployment (Critical)
+Why budget service is protected:
 
-EventZen includes Dockerized services orchestrated by compose.
+- Preserves internal trust boundary
+- Prevents bypass of core backend policy/orchestration logic
+- Reduces attack surface on financial mutation endpoints
 
-### Services in docker-compose
+## 7. ⚙️ Complete Setup Guide
 
-- `frontend`: React app served via Nginx, exposed on host `3000`
-- `backend`: Spring Boot core API, exposed on host `8080`
-- `db`: MySQL for core backend, exposed on host `3306`
-- `budget-service`: internal finance microservice (container port `8081`)
-- `budget-db`: PostgreSQL for budget service
+This section is intentionally explicit so onboarding is zero-confusion.
 
-### Steps to Run
-
-1. Clone repository
-2. Navigate to project root
-3. Run:
+### Step 1: Clone the repository
 
 ```bash
-docker-compose up --build
+git clone <your-github-repository-url>
+cd eventzen
 ```
 
-4. Access services:
+### Step 2: Environment configuration
+
+Create environment files in the exact locations below.
+
+#### Backend (`.env` in `/eventzen`)
+
+File path: `eventzen/.env`
+
+Recommended Docker Compose-ready example:
+
+```env
+# Spring datasource (backend -> MySQL container)
+SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/eventzen?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+SPRING_DATASOURCE_USERNAME=eventzen
+SPRING_DATASOURCE_PASSWORD=YourStrongDBPassword
+
+# JWT
+JWT_SECRET=YourLongRandomJWTSecret
+JWT_EXPIRATION=86400000
+
+# CORS for frontend origins
+APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Backend -> Budget Service integration
+BUDGET_SERVICE_BASE_URL=http://budget-service:8081
+INTERNAL_SERVICE_KEY=eventzen-internal-service-key-change-me
+
+# Optional password hardening salt in backend
+PASSWORD_SALT=change-me-for-non-dev
+
+# Used by docker-compose MySQL service
+MYSQL_ROOT_PASSWORD=YourStrongRootPassword
+MYSQL_DATABASE=eventzen
+MYSQL_USER=eventzen
+MYSQL_PASSWORD=YourStrongDBPassword
+```
+
+What each backend variable means:
+
+- `SPRING_DATASOURCE_URL`: JDBC URL for backend database connection
+- `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`: backend DB credentials
+- `JWT_SECRET`: signing key for JWT tokens
+- `JWT_EXPIRATION`: token expiry in milliseconds
+- `APP_CORS_ALLOWED_ORIGINS`: allowed frontend origins for browser requests
+- `BUDGET_SERVICE_BASE_URL`: internal URL Spring uses to call budget service
+- `INTERNAL_SERVICE_KEY`: shared key sent from Spring to budget service
+- `PASSWORD_SALT`: extra app-level salt used in backend password handling
+- `MYSQL_*`: initialization values consumed by MySQL container
+
+#### Frontend (`.env` in `/frontend`)
+
+File path: `frontend/.env`
+
+```env
+VITE_API_URL=http://localhost:8080
+```
+
+Why this is needed:
+
+- It tells the frontend where the Spring API is reachable from the browser
+- Keeps API host configurable across local/staging/production environments
+
+#### Budget Service (`.env` in `/budget-service`)
+
+File path: `budget-service/.env`
+
+```env
+PORT=8081
+DB_HOST=budget-db
+DB_PORT=5432
+DB_NAME=budget_tracking
+DB_USER=postgres
+DB_PASSWORD=postgres
+INTERNAL_SERVICE_KEY=eventzen-internal-service-key-change-me
+DB_RETRY_COUNT=12
+DB_RETRY_DELAY_MS=3000
+```
+
+What each budget variable means:
+
+- `PORT`: budget service listen port
+- `DB_HOST` / `DB_PORT`: PostgreSQL host and port
+- `DB_NAME` / `DB_USER` / `DB_PASSWORD`: PostgreSQL connection credentials
+- `INTERNAL_SERVICE_KEY`: must match backend key for internal API authorization
+- `DB_RETRY_COUNT` / `DB_RETRY_DELAY_MS`: startup DB retry strategy
+
+Important note for Docker Compose:
+
+- `budget-service` values are currently defined in `docker-compose.yml`
+- Ensure `INTERNAL_SERVICE_KEY` used by backend and budget service is the same value
+
+### Step 3: Docker setup (critical)
+
+Run from repository root:
+
+```bash
+docker compose up --build
+```
+
+What happens internally:
+
+- Builds and starts frontend, backend, and budget-service containers
+- Starts MySQL (`db`) and PostgreSQL (`budget-db`) containers
+- Applies service dependency order and health checks
+- Connects services on internal Docker network for inter-service calls
+
+### Step 4: Access the application
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8080
 
-### Environment Variables
+### Step 5: Verify everything works
 
-Core backend (`eventzen/.env`):
+Use this verification checklist:
 
-- MySQL datasource values
-- JWT secret/expiration
-- CORS allowed origins
-- Internal service key and budget service base URL
+1. Open frontend and register/login successfully.
+2. As admin, create an event.
+3. Open admin event budget modal, set total budget, add an expense.
+4. Confirm budget summary updates (actual cost/remaining budget/profit path).
+5. Confirm backend readiness endpoint: `GET http://localhost:8080/readiness`.
+6. Confirm budget service health from inside compose network:
+  - `docker compose exec budget-service wget -qO- http://localhost:8081/health`
 
-Frontend (`frontend/.env`):
+If steps 1-6 pass, end-to-end platform integration is working.
 
-- `VITE_API_URL` (typically `http://localhost:8080`)
+## 8. 🐳 Docker Architecture
 
-Budget service env:
+Services in `docker-compose.yml`:
 
-- DB host/port/name/user/password
-- `INTERNAL_SERVICE_KEY`
-- DB retry settings
+- `frontend`: React app served by Nginx, host port `3000`
+- `backend`: Spring Boot API, host port `8080`
+- `db`: MySQL, host port `3306`
+- `budget-service`: finance microservice, internal container port `8081`
+- `budget-db`: PostgreSQL for budget service
 
-### Ports and Persistence
+Port mapping summary:
 
-Default host ports:
+- `3000 -> frontend`
+- `8080 -> backend`
+- `3306 -> mysql`
+- `8081 -> budget-service` (container-internal in current compose; not published to host)
 
-- `3000` -> frontend
-- `8080` -> Spring backend
-- `3306` -> MySQL
-- budget service runs at `8081` inside compose network
+Internal networking:
 
-Persistent volumes:
+- Containers communicate by service name (`backend`, `budget-service`, `db`, `budget-db`)
+- Backend calls budget service over internal URL (`http://budget-service:8081`)
+- Budget service calls PostgreSQL via `budget-db:5432`
 
-- `mysql_data` for MySQL
-- `budget_postgres_data` for PostgreSQL
+## 9. 📁 Project Structure (Root Level)
 
-## 9. Tech Stack
+```text
+frontend/         # React UI application (routing, UX, API consumption)
+eventzen/         # Spring Boot core backend (auth, RBAC, operational domain, orchestration)
+budget-service/   # Node/Express financial microservice (budgets, expenses, profitability)
+docker-compose.yml # Multi-container orchestration for local full-stack execution
+```
 
-### Frontend
+Why this structure is effective:
 
-- React
-- React Router
-- Axios
-- Tailwind CSS (with custom CSS theming)
-- Vite
+- Clear service boundaries and ownership lines
+- Independent runtime concerns per service
+- Easier onboarding and debugging by subsystem
 
-### Core Backend
+## 10. ⚠️ System Design Considerations
 
-- Spring Boot
-- Spring Security (JWT)
-- Spring Data JPA / Hibernate
-- MySQL
+- Consistency vs availability:
+  - Current synchronous integration favors financial consistency over partial availability
+- Sync vs async:
+  - Sync REST keeps flow simple now; async messaging is a future resilience upgrade
+- Microservice boundaries:
+  - Finance is separated to protect domain ownership and reduce cross-domain coupling
 
-### Budget Microservice
+## 11. 📊 Observability (Brief)
 
-- Node.js (Express)
-- Sequelize ORM
-- PostgreSQL
+Current baseline:
 
-### Platform and Integration
+- Container logs via Docker for each service
+- Backend readiness endpoint: `/readiness`
+- Budget service health endpoint: `/health`
 
-- REST APIs
-- Docker and Docker Compose
+Practical use:
+
+- Monitor startup and integration issues quickly via `docker compose logs`
+- Use health/readiness endpoints for basic liveness checks
+
+## 12. 🚧 Limitations
+
+- No async broker-based messaging yet between backend and budget service
+- No built-in retry queue at integration boundary
+- Budget service auth currently uses shared internal key (not mTLS/service identity)
+- Frontend auth token persistence uses localStorage trade-off model
+- Limited centralized metrics/tracing in current baseline
+
+## 13. 🚀 Future Improvements
+
+- Introduce async eventing (Kafka/RabbitMQ) for resilient cross-service synchronization
+- Add distributed tracing and metrics dashboards (OpenTelemetry + Prometheus/Grafana)
+- Add stronger service-to-service auth (mTLS, rotating secrets, gateway policies)
+- Add reconciliation jobs for finance/booking drift detection
+- Add autoscaling and performance SLO instrumentation per service
 
 ---
 
-## System Summary
+## Submission Summary
 
-EventZen is a hybrid full-stack architecture that combines:
+EventZen demonstrates a pragmatic hybrid architecture:
 
-- Strong centralized domain orchestration in Spring Boot
-- Focused financial microservice isolation for budget correctness
-- Role-aware React UI for operational and administrative workflows
-
-This structure is suitable for academic evaluation and practical onboarding because it demonstrates clear boundaries, explicit communication patterns, secure integration, and containerized deployment readiness.
+- Role-aware frontend for operational workflows
+- Strong Spring backend orchestration for core business rules and security
+- Dedicated budget microservice for financial correctness and domain isolation
+- Docker-based reproducible setup suitable for evaluation and onboarding
