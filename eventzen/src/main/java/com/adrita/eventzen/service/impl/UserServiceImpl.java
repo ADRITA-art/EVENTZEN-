@@ -5,26 +5,49 @@ import com.adrita.eventzen.dto.LoginRequest;
 import com.adrita.eventzen.dto.RegisterRequest;
 import com.adrita.eventzen.dto.UpdateProfileRequest;
 import com.adrita.eventzen.dto.UserProfileResponse;
+import com.adrita.eventzen.entity.Booking;
+import com.adrita.eventzen.entity.BookingStatus;
+import com.adrita.eventzen.entity.Event;
+import com.adrita.eventzen.entity.EventStatus;
 import com.adrita.eventzen.entity.User;
 import com.adrita.eventzen.exception.BadCredentialsException;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.integration.budget.BudgetClient;
+import com.adrita.eventzen.repository.BookingRepository;
+import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.UserRepository;
 import com.adrita.eventzen.security.PasswordSecurityService;
 import com.adrita.eventzen.service.UserService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordSecurityService passwordSecurityService;
+    private final BookingRepository bookingRepository;
+    private final EventRepository eventRepository;
+    private final BudgetClient budgetClient;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordSecurityService passwordSecurityService) {
+    public UserServiceImpl(UserRepository userRepository,
+                           PasswordSecurityService passwordSecurityService,
+                           BookingRepository bookingRepository,
+                           EventRepository eventRepository,
+                           BudgetClient budgetClient) {
         this.userRepository = userRepository;
         this.passwordSecurityService = passwordSecurityService;
+        this.bookingRepository = bookingRepository;
+        this.eventRepository = eventRepository;
+        this.budgetClient = budgetClient;
     }
 
     @Override
@@ -125,11 +148,61 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void deleteUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
 
+        List<Booking> userBookings = bookingRepository.findByUserIdOrderByBookingTimeDesc(id);
+
+        Map<Long, Integer> confirmedSeatsToReleaseByEvent = new HashMap<>();
+        Set<Long> affectedEventIds = new HashSet<>();
+
+        for (Booking booking : userBookings) {
+            Long eventId = booking.getEvent().getId();
+            affectedEventIds.add(eventId);
+
+            if (booking.getStatus() == BookingStatus.CONFIRMED) {
+                confirmedSeatsToReleaseByEvent.merge(eventId, booking.getNumberOfSeats(), Integer::sum);
+            }
+        }
+
+        if (!confirmedSeatsToReleaseByEvent.isEmpty()) {
+            List<Event> affectedEvents = eventRepository.findAllById(confirmedSeatsToReleaseByEvent.keySet());
+            for (Event event : affectedEvents) {
+                int seatsToRelease = confirmedSeatsToReleaseByEvent.getOrDefault(event.getId(), 0);
+                int currentAvailable = event.getTicketAvailable() == null ? 0 : event.getTicketAvailable();
+                int maxCapacity = resolveMaxCapacity(event);
+                int updatedAvailable = Math.min(currentAvailable + seatsToRelease, maxCapacity);
+
+                event.setTicketAvailable(updatedAvailable);
+                if (event.getStatus() != EventStatus.CANCELLED && event.getStatus() != EventStatus.COMPLETED) {
+                    event.setStatus(updatedAvailable == 0 ? EventStatus.SOLD_OUT : EventStatus.ACTIVE);
+                }
+                eventRepository.save(event);
+            }
+        }
+
+        bookingRepository.deleteByUserId(id);
+
+        for (Long eventId : affectedEventIds) {
+            BigDecimal revenue = bookingRepository.sumTotalPriceByEventIdAndStatus(eventId, BookingStatus.CONFIRMED);
+            budgetClient.syncRevenueForEvent(eventId, revenue == null ? BigDecimal.ZERO : revenue);
+        }
+
         userRepository.delete(user);
+    }
+
+    private int resolveMaxCapacity(Event event) {
+        if (event.getMaxCapacity() != null) {
+            return event.getMaxCapacity();
+        }
+
+        if (event.getVenue() != null && event.getVenue().getCapacity() != null) {
+            return event.getVenue().getCapacity();
+        }
+
+        return Integer.MAX_VALUE;
     }
 
     private boolean verifyPasswordWithMigration(User user, String rawPassword) {

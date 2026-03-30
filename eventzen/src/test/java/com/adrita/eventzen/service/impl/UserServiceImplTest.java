@@ -5,11 +5,18 @@ import com.adrita.eventzen.dto.LoginRequest;
 import com.adrita.eventzen.dto.RegisterRequest;
 import com.adrita.eventzen.dto.UpdateProfileRequest;
 import com.adrita.eventzen.dto.UserProfileResponse;
+import com.adrita.eventzen.entity.Booking;
+import com.adrita.eventzen.entity.BookingStatus;
+import com.adrita.eventzen.entity.Event;
+import com.adrita.eventzen.entity.EventStatus;
 import com.adrita.eventzen.entity.Role;
 import com.adrita.eventzen.entity.User;
 import com.adrita.eventzen.exception.BadCredentialsException;
 import com.adrita.eventzen.exception.DuplicateResourceException;
 import com.adrita.eventzen.exception.ResourceNotFoundException;
+import com.adrita.eventzen.integration.budget.BudgetClient;
+import com.adrita.eventzen.repository.BookingRepository;
+import com.adrita.eventzen.repository.EventRepository;
 import com.adrita.eventzen.repository.UserRepository;
 import com.adrita.eventzen.security.PasswordSecurityService;
 import org.junit.jupiter.api.Test;
@@ -20,10 +27,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +44,15 @@ class UserServiceImplTest {
 
     @Mock
     private PasswordSecurityService passwordSecurityService;
+
+    @Mock
+    private BookingRepository bookingRepository;
+
+    @Mock
+    private EventRepository eventRepository;
+
+    @Mock
+    private BudgetClient budgetClient;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -190,10 +208,30 @@ class UserServiceImplTest {
     @Test
     void deleteUserByIdShouldDeleteFoundUser() {
         User user = User.builder().id(4L).email("x@test.com").role(Role.CUSTOMER).build();
+        Event event = new Event();
+        event.setId(10L);
+        event.setTicketAvailable(10);
+        event.setMaxCapacity(12);
+        event.setStatus(EventStatus.ACTIVE);
+
+        Booking booking = new Booking();
+        booking.setUser(user);
+        booking.setEvent(event);
+        booking.setNumberOfSeats(2);
+        booking.setStatus(BookingStatus.CONFIRMED);
+
         when(userRepository.findById(4L)).thenReturn(Optional.of(user));
+        when(bookingRepository.findByUserIdOrderByBookingTimeDesc(4L)).thenReturn(List.of(booking));
+        when(eventRepository.findAllById(any())).thenReturn(List.of(event));
+        when(bookingRepository.sumTotalPriceByEventIdAndStatus(10L, BookingStatus.CONFIRMED)).thenReturn(BigDecimal.ZERO);
 
         userService.deleteUserById(4L);
 
+        assertThat(event.getTicketAvailable()).isEqualTo(12);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ACTIVE);
+        verify(eventRepository).save(event);
+        verify(bookingRepository).deleteByUserId(4L);
+        verify(budgetClient).syncRevenueForEvent(eq(10L), eq(BigDecimal.ZERO));
         verify(userRepository).delete(user);
     }
 }

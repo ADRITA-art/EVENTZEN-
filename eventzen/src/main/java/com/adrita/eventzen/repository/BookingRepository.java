@@ -3,6 +3,7 @@ package com.adrita.eventzen.repository;
 import com.adrita.eventzen.entity.Booking;
 import com.adrita.eventzen.entity.BookingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,6 +19,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByEventIdOrderByBookingTimeDesc(Long eventId);
 
     List<Booking> findAllByOrderByBookingTimeDesc();
+
+    @Modifying
+    @Query("DELETE FROM Booking b WHERE b.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 
     @Query("""
             SELECT COALESCE(SUM(b.numberOfSeats), 0)

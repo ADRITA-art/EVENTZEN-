@@ -4,7 +4,7 @@ import { Zap, Mail, Lock, AlertCircle } from 'lucide-react';
 import { login as loginApi } from '../../api/auth';
 import { getMe } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
-import { isValidEmail, isValidPassword, passwordRuleText } from '../../utils/validation';
+import { isRequiredText, isValidEmail } from '../../utils/validation';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -22,8 +22,8 @@ export default function LoginPage() {
       setError('Please enter a valid email address.');
       return;
     }
-    if (!isValidPassword(form.password)) {
-      setError(passwordRuleText);
+    if (!isRequiredText(form.password)) {
+      setError('Please enter your password.');
       return;
     }
 

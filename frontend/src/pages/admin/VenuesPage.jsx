@@ -10,7 +10,7 @@ import {
   toTrimmed,
 } from '../../utils/validation';
 
-const VENUE_TYPES = ['HALL', 'AUDITORIUM', 'STADIUM', 'CONFERENCE_ROOM', 'OUTDOOR', 'OTHER'];
+const VENUE_TYPES = ['HALL', 'BANQUET', 'OUTDOOR', 'CONFERENCE_ROOM'];
 
 const emptyForm = {
   name: '', state: '', city: '', country: '', pincode: '', address: '',
