@@ -24,6 +24,22 @@ Why this system role matters:
 - Centralizes security and policy checks in backend services
 - Reduces credential exposure and cross-service coupling in the browser
 
+## Application Sreenshots:
+
+<img width="1050" height="499" alt="image" src="https://github.com/user-attachments/assets/934de2ac-c00d-48d2-ba61-114cd7ec8bf2" />
+
+<img width="1050" height="497" alt="image" src="https://github.com/user-attachments/assets/45a1b00d-0010-4563-add7-49d69cabe7eb" />
+
+<img width="1050" height="500" alt="image" src="https://github.com/user-attachments/assets/79b855ba-cb1b-48fd-9edf-d8f8f311865d" />
+
+<img width="1050" height="514" alt="image" src="https://github.com/user-attachments/assets/33cb57c1-5a63-4553-b257-4d68530c33b1" />
+
+<img width="1050" height="497" alt="image" src="https://github.com/user-attachments/assets/9cbf935e-5e82-4f49-aa6d-a6d903db0d9e" />
+
+
+
+
+
 ## 2. 🧠 Frontend Architecture & Design Rationale
 
 ### Why React + Vite
