@@ -6,6 +6,28 @@ import { isValidEmail, isValidPassword, passwordRuleText } from '../../utils/val
 
 const ROLES = ['CUSTOMER', 'ADMIN'];
 
+const resolveApiError = (err, fallback) => {
+  const data = err?.response?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    return data;
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  if (data && typeof data === 'object') {
+    const firstFieldError = Object.values(data).find((value) => typeof value === 'string' && value.trim());
+    if (firstFieldError) {
+      return firstFieldError;
+    }
+  }
+
+  return fallback;
+};
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'CUSTOMER' });
@@ -34,8 +56,14 @@ export default function RegisterPage() {
       setSuccess('Account created! Redirecting to login…');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || 'Registration failed.';
-      setError(typeof msg === 'string' ? msg : 'Registration failed.');
+      const status = err?.response?.status;
+      const msg = resolveApiError(err, 'Registration failed.');
+
+      if (status === 409 || /email\s+already\s+registered/i.test(msg)) {
+        setError('An account with this email already exists. Please login or use a different email.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

@@ -17,11 +17,34 @@ const emptyForm = {
   isActive: true,
 };
 
+const resolveApiError = (err, fallback) => {
+  const data = err?.response?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    return data;
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  if (data && typeof data === 'object') {
+    const firstFieldError = Object.values(data).find((value) => typeof value === 'string' && value.trim());
+    if (firstFieldError) {
+      return firstFieldError;
+    }
+  }
+
+  return fallback;
+};
+
 export default function VendorsPage() {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [modalError, setModalError] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -40,7 +63,11 @@ export default function VendorsPage() {
   };
   useEffect(() => { load(page, size); }, [page, size]);
 
-  const openCreate = () => { setForm(emptyForm); setModal({ mode: 'create' }); };
+  const openCreate = () => {
+    setForm(emptyForm);
+    setModalError('');
+    setModal({ mode: 'create' });
+  };
   const openEdit = (v) => {
     setForm({
       name: v.name,
@@ -51,6 +78,7 @@ export default function VendorsPage() {
       price: v.price?.toString() || '',
       isActive: v.isActive,
     });
+    setModalError('');
     setModal({ mode: 'edit', vendor: v });
   };
 
@@ -63,28 +91,30 @@ export default function VendorsPage() {
     const normalizedPhone = toTrimmed(form.phone);
     const normalizedEmail = toTrimmed(form.email).toLowerCase();
 
+    setModalError('');
+
     if (!isRequiredText(normalizedName)) {
-      setMsg({ type: 'error', text: 'Vendor name is required.' });
+      setModalError('Vendor name is required.');
       return;
     }
     if (!isRequiredText(normalizedServiceType)) {
-      setMsg({ type: 'error', text: 'Service type is required.' });
+      setModalError('Service type is required.');
       return;
     }
     if (!isRequiredText(normalizedContactPerson)) {
-      setMsg({ type: 'error', text: 'Contact person is required.' });
+      setModalError('Contact person is required.');
       return;
     }
     if (!isValidPhone(normalizedPhone)) {
-      setMsg({ type: 'error', text: 'Please enter a valid phone number (10-20 digits, optional +, spaces, (), -).' });
+      setModalError('Please enter a valid phone number (10-20 digits, optional +, spaces, (), -).');
       return;
     }
     if (!isValidEmail(normalizedEmail)) {
-      setMsg({ type: 'error', text: 'Please enter a valid vendor email address.' });
+      setModalError('Please enter a valid vendor email address.');
       return;
     }
     if (!isNonNegativeNumber(form.price)) {
-      setMsg({ type: 'error', text: 'Base price must be 0 or greater.' });
+      setModalError('Base price must be 0 or greater.');
       return;
     }
 
@@ -101,12 +131,12 @@ export default function VendorsPage() {
     try {
       if (modal.mode === 'create') await createVendor(payload);
       else await updateVendor(modal.vendor.id, payload);
+      setModalError('');
       setMsg({ type: 'success', text: `Vendor ${modal.mode === 'create' ? 'created' : 'updated'}.` });
       setModal(null);
       load(page, size);
     } catch (err) {
-      const m = err.response?.data?.message || err.response?.data || 'Failed to save vendor.';
-      setMsg({ type: 'error', text: typeof m === 'string' ? m : 'Error saving vendor.' });
+      setModalError(resolveApiError(err, 'Failed to save vendor.'));
     } finally { setSaving(false); }
   };
 
@@ -209,6 +239,11 @@ export default function VendorsPage() {
       {modal && (
         <Modal title={modal.mode === 'create' ? 'Add Vendor' : 'Edit Vendor'} onClose={() => setModal(null)} maxWidth="560px">
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            {modalError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffdad6', color: '#93000a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
+                <AlertCircle size={16} /> {modalError}
+              </div>
+            )}
             <F label="Vendor Name *" id="v-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Awesome Catering" />
             <F label="Service Type *" id="v-type" required value={form.serviceType} onChange={(e) => setForm({ ...form, serviceType: e.target.value })} placeholder="Catering" />
             

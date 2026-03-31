@@ -26,6 +26,28 @@ const emptyVendorForm = { vendorId: '', purpose: '', cost: '' };
 const emptyExpenseForm = { description: '', amount: '' };
 const emptyBudgetForm = { totalBudget: '' };
 
+const resolveApiError = (err, fallback) => {
+  const data = err?.response?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    return data;
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  if (data && typeof data === 'object') {
+    const firstFieldError = Object.values(data).find((value) => typeof value === 'string' && value.trim());
+    if (firstFieldError) {
+      return firstFieldError;
+    }
+  }
+
+  return fallback;
+};
+
 const Tooltip = ({ text, children, align = 'center' }) => {
   const alignStyle = align === 'right' ? { right: '-5px', transform: 'none' } :
                      { left: '50%', transform: 'translateX(-50%)' };
@@ -62,10 +84,12 @@ export default function AdminEventsPage() {
   
   const [vendorModal, setVendorModal] = useState(null);
   const [vendorForm, setVendorForm] = useState(emptyVendorForm);
+  const [vendorModalError, setVendorModalError] = useState('');
   
   const [budgetModal, setBudgetModal] = useState(null);
   const [expenseForm, setExpenseForm] = useState(emptyExpenseForm);
   const [budgetForm, setBudgetForm] = useState(emptyBudgetForm);
+  const [budgetModalError, setBudgetModalError] = useState('');
   
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -174,6 +198,7 @@ export default function AdminEventsPage() {
   };
 
   const openVendors = async (ev) => {
+     setVendorModalError('');
      setVendorModal({ event: ev, vendors: [] });
      try {
        const r = await getEventVendors(ev.id);
@@ -186,16 +211,18 @@ export default function AdminEventsPage() {
   const handleAddVendor = async (e) => {
      e.preventDefault();
 
+     setVendorModalError('');
+
      if (!isPositiveInteger(vendorForm.vendorId)) {
-       setMsg({ type: 'error', text: 'Please select a vendor before attaching.' });
+       setVendorModalError('Please select a vendor before attaching.');
        return;
      }
      if (!isRequiredText(vendorForm.purpose)) {
-       setMsg({ type: 'error', text: 'Vendor purpose is required.' });
+       setVendorModalError('Vendor purpose is required.');
        return;
      }
      if (!isNonNegativeNumber(vendorForm.cost)) {
-       setMsg({ type: 'error', text: 'Vendor cost must be 0 or greater.' });
+       setVendorModalError('Vendor cost must be 0 or greater.');
        return;
      }
 
@@ -213,21 +240,23 @@ export default function AdminEventsPage() {
        setVendorModal({ ...vendorModal, vendors: r.data });
        setVendorForm(emptyVendorForm);
      } catch(err) {
-        setMsg({ type: 'error', text: 'Failed to assign vendor.' });
+        setVendorModalError(resolveApiError(err, 'Failed to assign vendor.'));
      } finally { setSaving(false); }
   };
 
   const handleRemoveVendor = async (vendorId) => {
      try {
+       setVendorModalError('');
        await removeVendorFromEvent(vendorModal.event.id, vendorId);
        const r = await getEventVendors(vendorModal.event.id);
        setVendorModal({ ...vendorModal, vendors: r.data });
      } catch(err) {
-       setMsg({ type: 'error', text: 'Failed to remove vendor.' });
+       setVendorModalError(resolveApiError(err, 'Failed to remove vendor.'));
      }
   };
 
   const openBudgetView = async (ev) => {
+      setBudgetModalError('');
      setBudgetModal({ event: ev, budget: null, expenses: [] });
       setBudgetForm(emptyBudgetForm);
      try {
@@ -247,8 +276,9 @@ export default function AdminEventsPage() {
 
   const handleSetBudget = async (e) => {
      e.preventDefault();
+     setBudgetModalError('');
      if (!isNonNegativeNumber(budgetForm.totalBudget)) {
-       setMsg({ type: 'error', text: 'Total budget must be 0 or greater.' });
+       setBudgetModalError('Total budget must be 0 or greater.');
        return;
      }
 
@@ -264,7 +294,7 @@ export default function AdminEventsPage() {
        setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
        setBudgetForm({ totalBudget: bData?.totalBudget ? String(bData.totalBudget) : budgetForm.totalBudget });
      } catch (err) {
-       setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to set total budget.' });
+       setBudgetModalError(resolveApiError(err, 'Failed to set total budget.'));
      } finally {
        setSaving(false);
      }
@@ -273,12 +303,14 @@ export default function AdminEventsPage() {
   const handleAddExpense = async (e) => {
      e.preventDefault();
 
+     setBudgetModalError('');
+
      if (!isRequiredText(expenseForm.description)) {
-       setMsg({ type: 'error', text: 'Expense description is required.' });
+       setBudgetModalError('Expense description is required.');
        return;
      }
      if (!isPositiveNumber(expenseForm.amount)) {
-       setMsg({ type: 'error', text: 'Expense amount must be greater than 0.' });
+       setBudgetModalError('Expense amount must be greater than 0.');
        return;
      }
 
@@ -298,12 +330,13 @@ export default function AdminEventsPage() {
        setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
        setExpenseForm(emptyExpenseForm);
      } catch(err) {
-        setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to add expense.' });
+        setBudgetModalError(resolveApiError(err, 'Failed to add expense.'));
      } finally { setSaving(false); }
   };
 
   const handleRemoveExpense = async (expenseId) => {
      try {
+       setBudgetModalError('');
        await deleteExpense(expenseId);
        const [bReq, eReq] = await Promise.allSettled([
            getBudgetByEvent(budgetModal.event.id),
@@ -313,7 +346,7 @@ export default function AdminEventsPage() {
        const eData = eReq.status === 'fulfilled' ? eReq.value.data : [];
        setBudgetModal({ ...budgetModal, budget: bData, expenses: eData });
      } catch(err) {
-       setMsg({ type: 'error', text: 'Failed to remove expense.' });
+       setBudgetModalError(resolveApiError(err, 'Failed to remove expense.'));
      }
   };
 
@@ -454,6 +487,11 @@ export default function AdminEventsPage() {
 
       {vendorModal && (
         <Modal title={`Manage Vendors: ${vendorModal.event.name}`} onClose={() => setVendorModal(null)} maxWidth="640px">
+          {vendorModalError && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffdad6', color: '#93000a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+              <AlertCircle size={16} /> {vendorModalError}
+            </div>
+          )}
           {vendorModal.vendors.length > 0 ? (
             <div style={{ marginBottom: '1.5rem', background: '#f7f9fb', borderRadius: '8px', padding: '1rem', border: '1px solid #e1e4ed' }}>
                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>Assigned Vendors</h3>
@@ -481,7 +519,10 @@ export default function AdminEventsPage() {
               <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#434655', display: 'block', marginBottom: '0.3rem' }}>Select Vendor *</label>
               <select required value={vendorForm.vendorId} onChange={(e) => setVendorForm({ ...vendorForm, vendorId: e.target.value })} className="input-field">
                 <option value="">— Choose —</option>
-                {allVendors.filter(av => !vendorModal.vendors.some(evv => evv.vendorId === av.id)).map(av => (
+                {allVendors
+                  .filter((av) => av.isActive)
+                  .filter(av => !vendorModal.vendors.some(evv => evv.vendorId === av.id))
+                  .map(av => (
                    <option key={av.id} value={av.id}>{av.name} ({av.serviceType})</option>
                 ))}
               </select>
@@ -499,6 +540,11 @@ export default function AdminEventsPage() {
 
       {budgetModal && (
         <Modal title={`Budget: ${budgetModal.event.name}`} onClose={() => setBudgetModal(null)} maxWidth="640px">
+          {budgetModalError && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffdad6', color: '#93000a', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+              <AlertCircle size={16} /> {budgetModalError}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
              <div style={{ padding: '1rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', marginBottom: '4px' }}>
