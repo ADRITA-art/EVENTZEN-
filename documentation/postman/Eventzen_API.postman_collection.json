@@ -1,0 +1,621 @@
+{
+  "info": {
+    "name": "Eventzen API Collection",
+    "description": "Comprehensive Postman collection for Event Service and Budget Service endpoints documented in API_ENDPOINTS_AND_FLOWS.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response status is not server error', function () {",
+          "  pm.expect(pm.response.code).to.be.below(500);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "budgetServiceUrl", "value": "http://localhost:8081" },
+    { "key": "jwtToken", "value": "" },
+    { "key": "internalServiceKey", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "venueId", "value": "1" },
+    { "key": "eventId", "value": "1" },
+    { "key": "bookingId", "value": "1" },
+    { "key": "expenseId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\",\n  \"role\": \"CUSTOMER\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register",
+            "description": "Expected response body: \"User registered successfully\""
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Expected response body: { token, role }. After calling, copy token into jwtToken variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let jsonData = {};",
+                  "try { jsonData = pm.response.json(); } catch (e) {}",
+                  "if (jsonData.token) { pm.collectionVariables.set('jwtToken', jsonData.token); }",
+                  "pm.test('Login returns token', function () {",
+                  "  pm.expect(jsonData).to.have.property('token');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/readiness",
+            "description": "Expected response body: { status: 'UP', budgetService: 'UP' } or 503 when budget service is down."
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/auth/me",
+            "description": "Expected response body: { id, name, email, role }"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"oldPass\",\n  \"newPassword\": \"newPass\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/change-password",
+            "description": "Expected response body: \"Password updated successfully\""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Name\"\n}"
+            },
+            "url": "{{baseUrl}}/users/me",
+            "description": "Expected response body: { id, name, email, role }"
+          }
+        },
+        {
+          "name": "Get User by ID (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/users/{{userId}}",
+            "description": "Expected response body: { id, name, email, role }"
+          }
+        },
+        {
+          "name": "Delete User by ID (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/users/{{userId}}",
+            "description": "Expected response body: \"User deleted successfully\""
+          }
+        },
+        {
+          "name": "Get All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/admin/users",
+            "description": "Expected response body: array of user profile objects"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Venues",
+      "item": [
+        {
+          "name": "Create Venue (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Grand Hall\",\n  \"state\": \"Karnataka\",\n  \"city\": \"Bengaluru\",\n  \"country\": \"India\",\n  \"pincode\": \"560001\",\n  \"address\": \"MG Road\",\n  \"type\": \"HALL\",\n  \"capacity\": 500,\n  \"description\": \"Premium indoor venue\",\n  \"amenities\": \"AC, Parking, WiFi\",\n  \"pricePerHour\": 2500.00,\n  \"rating\": 4.5,\n  \"imageUrl\": \"https://example.com/venue.jpg\",\n  \"isActive\": true\n}"
+            },
+            "url": "{{baseUrl}}/venues",
+            "description": "Expected response body: created venue object with id, createdAt, updatedAt"
+          }
+        },
+        {
+          "name": "Update Venue (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Grand Hall Updated\",\n  \"state\": \"Karnataka\",\n  \"city\": \"Bengaluru\",\n  \"country\": \"India\",\n  \"pincode\": \"560001\",\n  \"address\": \"MG Road\",\n  \"type\": \"HALL\",\n  \"capacity\": 500,\n  \"description\": \"Premium indoor venue\",\n  \"amenities\": \"AC, Parking, WiFi\",\n  \"pricePerHour\": 2600.00,\n  \"rating\": 4.6,\n  \"imageUrl\": \"https://example.com/venue.jpg\",\n  \"isActive\": true\n}"
+            },
+            "url": "{{baseUrl}}/venues/{{venueId}}",
+            "description": "Expected response body: updated venue object"
+          }
+        },
+        {
+          "name": "Delete Venue (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/venues/{{venueId}}",
+            "description": "Expected response body: \"Venue deleted successfully\""
+          }
+        },
+        {
+          "name": "Get All Venues",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/venues",
+            "description": "Expected response body: array of venue objects"
+          }
+        },
+        {
+          "name": "Get Venue by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/venues/{{venueId}}",
+            "description": "Expected response body: venue object"
+          }
+        },
+        {
+          "name": "Search Venues",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/venues/search?location=Bengaluru&capacity=200",
+            "description": "Expected response body: array of filtered venues"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Create Event (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech Fest\",\n  \"description\": \"Annual event\",\n  \"eventDate\": \"2026-04-20\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"14:00\",\n  \"venueId\": 1,\n  \"ticketPrice\": 1500.00,\n  \"maxCapacity\": 450\n}"
+            },
+            "url": "{{baseUrl}}/events",
+            "description": "Expected response body: created event object with status and ticketAvailable"
+          }
+        },
+        {
+          "name": "Update Event (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech Fest Updated\",\n  \"description\": \"Annual event updated\",\n  \"eventDate\": \"2026-04-20\",\n  \"startTime\": \"10:30\",\n  \"endTime\": \"14:30\",\n  \"venueId\": 1,\n  \"ticketPrice\": 1700.00,\n  \"maxCapacity\": 400\n}"
+            },
+            "url": "{{baseUrl}}/events/{{eventId}}",
+            "description": "Expected response body: updated event object"
+          }
+        },
+        {
+          "name": "Cancel Event (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events/{{eventId}}",
+            "description": "Expected response body: \"Event cancelled successfully\""
+          }
+        },
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events",
+            "description": "Expected response body: array of event objects"
+          }
+        },
+        {
+          "name": "Get Event by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events/{{eventId}}",
+            "description": "Expected response body: event object"
+          }
+        },
+        {
+          "name": "Get Events by Venue",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events/venue/{{venueId}}",
+            "description": "Expected response body: array of event objects"
+          }
+        },
+        {
+          "name": "Search Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events/search?date=2026-04-20&location=Bengaluru",
+            "description": "Expected response body: array of filtered events"
+          }
+        },
+        {
+          "name": "Upcoming Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/events/upcoming",
+            "description": "Expected response body: array of upcoming event objects"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Create Booking (Customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 1,\n  \"numberOfSeats\": 3\n}"
+            },
+            "url": "{{baseUrl}}/bookings",
+            "description": "Expected response body: booking object with status CONFIRMED"
+          }
+        },
+        {
+          "name": "Get My Bookings (Customer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/bookings/my",
+            "description": "Expected response body: array of booking objects"
+          }
+        },
+        {
+          "name": "Cancel My Booking (Customer)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "description": "Expected response body: \"Booking cancelled successfully\""
+          }
+        },
+        {
+          "name": "Get All Bookings (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/bookings",
+            "description": "Expected response body: array of booking objects"
+          }
+        },
+        {
+          "name": "Get Bookings by Event (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/bookings/event/{{eventId}}",
+            "description": "Expected response body: array of booking objects"
+          }
+        },
+        {
+          "name": "Update Booking Status (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CANCELLED\"\n}"
+            },
+            "url": "{{baseUrl}}/bookings/{{bookingId}}/status",
+            "description": "Expected response body: updated booking object"
+          }
+        },
+        {
+          "name": "Event Booking Summary (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/bookings/event/{{eventId}}/summary",
+            "description": "Expected response body: { eventId, maxCapacity, totalBookedSeats, remainingSeats }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Budget (Event Service)",
+      "item": [
+        {
+          "name": "Get Budget By Event (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/admin/budget/event/{{eventId}}",
+            "description": "Expected response body: budget summary object with estimatedCost, totalBudget, actualCost, revenue, remainingBudget, profit"
+          }
+        },
+        {
+          "name": "Set Planned Budget (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 101,\n  \"totalBudget\": 18000\n}"
+            },
+            "url": "{{baseUrl}}/admin/budget/set",
+            "description": "Expected response body: updated budget object"
+          }
+        },
+        {
+          "name": "Get Expenses By Event (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/admin/budget/expense/event/{{eventId}}",
+            "description": "Expected response body: array of expense objects"
+          }
+        },
+        {
+          "name": "Add Expense (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 101,\n  \"category\": \"Catering\",\n  \"amount\": 25000,\n  \"description\": \"Lunch and snacks\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/budget/expense",
+            "description": "Expected response body: created expense object"
+          }
+        },
+        {
+          "name": "Delete Expense (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/admin/budget/expense/{{expenseId}}",
+            "description": "Expected response body: { message, eventId, actualCost }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Budget Service Internal",
+      "item": [
+        {
+          "name": "Upsert Event Estimated Cost",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 101,\n  \"estimatedCost\": 15000\n}"
+            },
+            "url": "{{budgetServiceUrl}}/api/budget/estimate",
+            "description": "Expected response body: budget row object"
+          }
+        },
+        {
+          "name": "Get Budget Summary by Event",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" }
+            ],
+            "url": "{{budgetServiceUrl}}/api/budget/{{eventId}}",
+            "description": "Expected response body: { eventId, estimatedCost, totalBudget, actualCost, revenue, remainingBudget, profit }"
+          }
+        },
+        {
+          "name": "Set Planned Total Budget",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 101,\n  \"totalBudget\": 18000\n}"
+            },
+            "url": "{{budgetServiceUrl}}/api/budget/set",
+            "description": "Expected response body: updated budget row object"
+          }
+        },
+        {
+          "name": "Sync Event Revenue",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"revenue\": 50000\n}"
+            },
+            "url": "{{budgetServiceUrl}}/api/budget/revenue/{{eventId}}",
+            "description": "Expected behavior: revenue is updated for event budget entry"
+          }
+        },
+        {
+          "name": "Add Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": 101,\n  \"category\": \"Catering\",\n  \"amount\": 25000,\n  \"description\": \"Lunch and snacks\"\n}"
+            },
+            "url": "{{budgetServiceUrl}}/api/expense",
+            "description": "Expected response body: created expense object"
+          }
+        },
+        {
+          "name": "Get Expenses by Event",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" }
+            ],
+            "url": "{{budgetServiceUrl}}/api/expense/event/{{eventId}}",
+            "description": "Expected response body: array of expense objects"
+          }
+        },
+        {
+          "name": "Delete Expense",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Internal-Service-Key {{internalServiceKey}}" }
+            ],
+            "url": "{{budgetServiceUrl}}/api/expense/{{expenseId}}",
+            "description": "Expected response body: { message, eventId, actualCost }"
+          }
+        }
+      ]
+    }
+  ]
+}

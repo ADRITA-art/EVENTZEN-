@@ -53,6 +53,8 @@ services:
     depends_on:
       budget-db:
         condition: service_healthy
+    env_file:
+      - ./eventzen/.env
     environment:
       PORT: 8081
       DB_HOST: budget-db
@@ -60,7 +62,6 @@ services:
       DB_NAME: budget_tracking
       DB_USER: postgres
       DB_PASSWORD: postgres
-      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-eventzen-internal-service-key}
       DB_RETRY_COUNT: 12
       DB_RETRY_DELAY_MS: 3000
     healthcheck:
